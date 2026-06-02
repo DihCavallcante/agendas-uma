@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Bebas+Neue&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@700;800&family=Montserrat:wght@700;800&family=Oswald:wght@600;700&family=Raleway:wght@700;800&family=Pacifico&family=Righteous&family=Abril+Fatface&family=Black+Han+Sans&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Nunito',sans-serif;background:var(--color-background-tertiary);color:var(--color-text-primary)}
+.app{display:grid;grid-template-columns:320px 1fr;min-height:100vh}
+.panel{background:var(--color-background-primary);border-right:0.5px solid var(--color-border-tertiary);padding:16px;overflow-y:auto;max-height:100vh;position:sticky;top:0}
+.panel-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;margin-bottom:14px;border-bottom:1px solid var(--color-border-tertiary);padding-bottom:8px}
+.lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--color-text-secondary);margin:12px 0 5px}
+.row{display:flex;gap:6px;margin-bottom:6px}
+input[type=text],input[type=time],input[type=number],select{width:100%;padding:6px 9px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-family:'Nunito',sans-serif;font-size:12px;background:var(--color-background-secondary);color:var(--color-text-primary)}
+.swatches{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
+.sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;transition:transform .15s}
+.sw:hover{transform:scale(1.15)}
+.sw.sel{border-color:var(--color-text-primary)}
+.bgsw{width:26px;height:26px;border-radius:6px;cursor:pointer;border:2.5px solid transparent;transition:transform .15s}
+.bgsw:hover{transform:scale(1.1)}
+.bgsw.sel{border-color:var(--color-text-primary)}
+.btn-add{width:100%;padding:8px;background:#2d3748;color:#fff;border:none;border-radius:var(--border-radius-md);font-family:'Nunito',sans-serif;font-weight:700;font-size:12px;cursor:pointer;margin-top:3px}
+.btn-add:hover{background:#1a202c}
+.btn-exp{width:100%;padding:10px;background:#553C9A;color:#fff;border:none;border-radius:var(--border-radius-md);font-family:'Nunito',sans-serif;font-weight:800;font-size:13px;cursor:pointer;margin-top:10px}
+.btn-exp:hover{background:#44337A}
+.ev-item{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:var(--border-radius-md);background:var(--color-background-secondary);margin-bottom:5px;font-size:11px}
+.ev-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ev-info{flex:1;min-width:0}
+.ev-day{font-weight:800;font-size:12px}
+.ev-desc{color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-rm{background:none;border:none;color:var(--color-text-secondary);cursor:pointer;padding:1px 4px;font-size:15px;line-height:1;border-radius:4px}
+.btn-rm:hover{color:#e53e3e}
+.divider{height:0.5px;background:var(--color-border-tertiary);margin:10px 0}
+.preview{padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;background:var(--color-background-secondary)}
+.prev-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--color-text-secondary);align-self:flex-start}
+.logo-box{border:1.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px;text-align:center;cursor:pointer;font-size:11px;color:var(--color-text-secondary);position:relative}
+.logo-box input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+/* Font selector cards */
+.font-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:4px}
+.font-card{border:1.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:6px 8px;cursor:pointer;text-align:center;transition:all .15s;background:var(--color-background-secondary)}
+.font-card:hover{border-color:var(--color-text-secondary)}
+.font-card.sel{border-color:#553C9A;background:rgba(85,60,154,.08)}
+.font-card .fc-name{font-size:9px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
+.font-card .fc-preview{font-size:17px;line-height:1.1}
+
+/* ===== AGENDA HTML ===== */
+#agenda-html{
+  width:600px;
+  min-height:860px;
+  padding:36px 36px 32px;
+  font-family:'Nunito',sans-serif;
+  position:relative;
+  overflow:hidden;
+  flex-shrink:0;
+}
+.ag-deco{position:absolute;right:0;bottom:0;width:50%;height:60%;opacity:.07;pointer-events:none}
+.ag-title{font-size:88px;text-align:center;letter-spacing:4px;line-height:1}
+.ag-month{font-size:50px;text-align:center;line-height:1.1;margin-bottom:18px}
+.cal-wrap{width:100%;margin-bottom:18px}
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-weight:700;font-size:13px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,.1)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);text-align:center}
+.cal-cell{padding:6px 0;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;height:44px}
+.ev-subtitle{font-family:'Georgia',serif;font-style:italic;font-size:24px;text-align:center;margin-bottom:14px}
+.ev-card{display:flex;align-items:center;border-radius:8px;margin-bottom:8px;overflow:hidden;min-height:46px}
+.ev-bar{width:5px;flex-shrink:0;align-self:stretch}
+.ev-content{flex:1;padding:10px 14px;font-weight:700;font-size:13px;letter-spacing:.3px}
+.ev-num{font-size:15px;font-weight:800;margin-right:4px}
+.ev-pipe{opacity:.4;margin-right:8px}
+
+/* RODAPÉ MELHORADO */
+.ag-footer{
+  text-align:center;
+  margin-top:22px;
+  padding-top:16px;
+  border-top:1px solid rgba(0,0,0,.1);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+}
+.ag-footer img{
+  max-height:80px;
+  max-width:200px;
+  object-fit:contain;
+  display:block;
+  margin:0 auto;
+}
+.ag-footer-text{
+  font-size:20px;
+  letter-spacing:3px;
+  opacity:.65;
+  text-align:center;
+  width:100%;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- PAINEL -->
+<div class="panel">
+  <div class="panel-title">Gerador de Agenda</div>
+
+  <div class="lbl">Mês e Ano</div>
+  <div class="row">
+    <select id="sel-month" style="flex:2">
+      <option value="0">Janeiro</option><option value="1">Fevereiro</option>
+      <option value="2">Março</option><option value="3">Abril</option>
+      <option value="4">Maio</option><option value="5" selected>Junho</option>
+      <option value="6">Julho</option><option value="7">Agosto</option>
+      <option value="8">Setembro</option><option value="9">Outubro</option>
+      <option value="10">Novembro</option><option value="11">Dezembro</option>
+    </select>
+    <input type="number" id="sel-year" value="2025" min="2020" max="2040" style="flex:1">
+  </div>
+
+  <div class="lbl">Nome da Organização</div>
+  <input type="text" id="org-name" value="UMA DIADEMA" oninput="updateFooterText()">
+
+  <div class="lbl">Cor de Fundo</div>
+  <div class="swatches" id="bg-swatches">
+    <div class="bgsw sel" style="background:#E8E4DC" data-v="#E8E4DC" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#F7F3EC" data-v="#F7F3EC" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#EBF4F8" data-v="#EBF4F8" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#F0FBF4" data-v="#F0FBF4" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#FFF0F0" data-v="#FFF0F0" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#F5F0FF" data-v="#F5F0FF" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#FFFBF0" data-v="#FFFBF0" onclick="pickBg(this)"></div>
+    <div class="bgsw" style="background:#1A202C" data-v="#1A202C" onclick="pickBg(this)"></div>
+    <input type="color" id="bg-custom" value="#E8E4DC" style="width:26px;height:26px;border-radius:6px;padding:1px;border:2px solid transparent;cursor:pointer" oninput="customBg(this.value)">
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- SELETOR DE FONTES -->
+  <div class="lbl">Fonte do Título (AGENDA)</div>
+  <div class="font-grid" id="title-fonts">
+    <div class="font-card sel" data-font="Bebas Neue" onclick="pickTitleFont(this)">
+      <div class="fc-name">Bebas Neue</div>
+      <div class="fc-preview" style="font-family:'Bebas Neue',sans-serif">AGENDA</div>
+    </div>
+    <div class="font-card" data-font="Oswald" onclick="pickTitleFont(this)">
+      <div class="fc-name">Oswald</div>
+      <div class="fc-preview" style="font-family:'Oswald',sans-serif">AGENDA</div>
+    </div>
+    <div class="font-card" data-font="Montserrat" onclick="pickTitleFont(this)">
+      <div class="fc-name">Montserrat</div>
+      <div class="fc-preview" style="font-family:'Montserrat',sans-serif;font-weight:800">AGENDA</div>
+    </div>
+    <div class="font-card" data-font="Abril Fatface" onclick="pickTitleFont(this)">
+      <div class="fc-name">Abril Fatface</div>
+      <div class="fc-preview" style="font-family:'Abril Fatface',serif">AGENDA</div>
+    </div>
+    <div class="font-card" data-font="Raleway" onclick="pickTitleFont(this)">
+      <div class="fc-name">Raleway</div>
+      <div class="fc-preview" style="font-family:'Raleway',sans-serif;font-weight:800">AGENDA</div>
+    </div>
+    <div class="font-card" data-font="Black Han Sans" onclick="pickTitleFont(this)">
+      <div class="fc-name">Black Han Sans</div>
+      <div class="fc-preview" style="font-family:'Black Han Sans',sans-serif">AGENDA</div>
+    </div>
+  </div>
+
+  <div class="lbl">Fonte do Mês</div>
+  <div class="font-grid" id="month-fonts">
+    <div class="font-card sel" data-font="Dancing Script" onclick="pickMonthFont(this)">
+      <div class="fc-name">Dancing Script</div>
+      <div class="fc-preview" style="font-family:'Dancing Script',cursive">Junho</div>
+    </div>
+    <div class="font-card" data-font="Pacifico" onclick="pickMonthFont(this)">
+      <div class="fc-name">Pacifico</div>
+      <div class="fc-preview" style="font-family:'Pacifico',cursive">Junho</div>
+    </div>
+    <div class="font-card" data-font="Righteous" onclick="pickMonthFont(this)">
+      <div class="fc-name">Righteous</div>
+      <div class="fc-preview" style="font-family:'Righteous',cursive">Junho</div>
+    </div>
+    <div class="font-card" data-font="Playfair Display" onclick="pickMonthFont(this)">
+      <div class="fc-name">Playfair Display</div>
+      <div class="fc-preview" style="font-family:'Playfair Display',serif">Junho</div>
+    </div>
+    <div class="font-card" data-font="Raleway" onclick="pickMonthFont(this)">
+      <div class="fc-name">Raleway</div>
+      <div class="fc-preview" style="font-family:'Raleway',sans-serif;font-weight:800">Junho</div>
+    </div>
+    <div class="font-card" data-font="Montserrat" onclick="pickMonthFont(this)">
+      <div class="fc-name">Montserrat</div>
+      <div class="fc-preview" style="font-family:'Montserrat',sans-serif;font-weight:700">Junho</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="lbl">Adicionar Evento</div>
+  <div class="row">
+    <div style="flex:1"><div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:3px">Dia</div><input type="number" id="ev-day" placeholder="14" min="1" max="31"></div>
+    <div style="flex:1.5"><div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:3px">Horário</div><input type="time" id="ev-time"></div>
+  </div>
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:3px">Descrição</div>
+  <input type="text" id="ev-desc" placeholder="Ex: Saída Vila Nogueira" style="margin-bottom:7px">
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:4px">Cor da barra</div>
+  <div class="swatches" id="ev-swatches">
+    <div class="sw sel" style="background:#9B5DE5" data-v="#9B5DE5" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#00B4D8" data-v="#00B4D8" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#06D6A0" data-v="#06D6A0" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#FFB703" data-v="#FFB703" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#FB5607" data-v="#FB5607" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#EF233C" data-v="#EF233C" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#3A86FF" data-v="#3A86FF" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#2D6A4F" data-v="#2D6A4F" onclick="pickColor(this)"></div>
+    <input type="color" id="ev-custom-color" value="#9B5DE5" style="width:26px;height:26px;border-radius:50%;padding:1px;border:2px solid transparent;cursor:pointer" oninput="customColor(this.value)">
+  </div>
+  <button class="btn-add" onclick="addEvent()">+ Adicionar Evento</button>
+
+  <div class="divider"></div>
+  <div class="lbl">Eventos</div>
+  <div id="ev-list"><div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">Nenhum evento ainda.</div></div>
+
+  <div class="divider"></div>
+  <div class="lbl">Logo (rodapé)</div>
+  <div class="logo-box">
+    <input type="file" accept="image/*" onchange="handleLogo(this)">
+    ↑ Clique para enviar a logo
+    <div id="logo-fname" style="font-size:10px;margin-top:3px;color:var(--color-text-secondary)"></div>
+  </div>
+  <button style="width:100%;margin-top:6px;padding:5px;background:none;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;color:var(--color-text-secondary)" onclick="removeLogo()">× Remover logo</button>
+
+  <button class="btn-exp" onclick="exportPNG()">⬇ Gerar e Baixar PNG</button>
+  <div id="exp-status" style="font-size:11px;text-align:center;margin-top:6px;color:var(--color-text-secondary)"></div>
+</div>
+
+<!-- PREVIEW -->
+<div class="preview">
+  <div class="prev-lbl">Preview</div>
+  <div id="agenda-html" style="background:#E8E4DC;color:#2D3748">
+    <svg class="ag-deco" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="200,0 200,200 50,200" fill="#000"/>
+      <polygon points="200,80 200,200 80,200" fill="#000"/>
+    </svg>
+
+    <div class="ag-title" id="ag-title-el" style="font-family:'Bebas Neue',sans-serif">AGENDA</div>
+    <div class="ag-month" id="ag-month-el" style="font-family:'Dancing Script',cursive">JUNHO</div>
+
+    <div class="cal-wrap">
+      <div class="cal-head" id="cal-head"></div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <div class="ev-subtitle">Eventos imperdíveis! Confira...</div>
+    <div id="ev-cards"></div>
+
+    <div class="ag-footer">
+      <img id="footer-logo" src="" style="display:none">
+      <div class="ag-footer-text" id="footer-text" style="font-family:'Bebas Neue',sans-serif">UMA ÉLIDA</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+const MONTHS_UP   = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+const MONTHS_PT   = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DAYS_PT     = ['D','S','T','Q','Q','S','S'];
+
+let events      = [];
+let bgColor     = '#E8E4DC';
+let evColor     = '#9B5DE5';
+let logoDataUrl = null;
+let titleFont   = 'Bebas Neue';
+let monthFont   = 'Dancing Script';
+
+/* ---- BG ---- */
+function pickBg(el){
+  document.querySelectorAll('.bgsw').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  bgColor = el.dataset.v;
+  document.getElementById('bg-custom').value = bgColor;
+  applyBg();
+}
+function customBg(v){ bgColor=v; document.querySelectorAll('.bgsw').forEach(s=>s.classList.remove('sel')); applyBg(); }
+function applyBg(){
+  const ag   = document.getElementById('agenda-html');
+  const dark = bgColor==='#1A202C';
+  ag.style.background = bgColor;
+  ag.style.color = dark?'#F7FAFC':'#2D3748';
+  renderCards();
+}
+
+/* ---- FONTS ---- */
+function pickTitleFont(el){
+  document.querySelectorAll('#title-fonts .font-card').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  titleFont = el.dataset.font;
+  document.getElementById('ag-title-el').style.fontFamily = `'${titleFont}',sans-serif`;
+  document.getElementById('footer-text').style.fontFamily = `'${titleFont}',sans-serif`;
+}
+function pickMonthFont(el){
+  document.querySelectorAll('#month-fonts .font-card').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  monthFont = el.dataset.font;
+  document.getElementById('ag-month-el').style.fontFamily = `'${monthFont}',cursive`;
+}
+
+/* ---- EV COLOR ---- */
+function pickColor(el){
+  document.querySelectorAll('#ev-swatches .sw').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  evColor = el.dataset.v;
+  document.getElementById('ev-custom-color').value = evColor;
+}
+function customColor(v){ evColor=v; document.querySelectorAll('#ev-swatches .sw').forEach(s=>s.classList.remove('sel')); }
+
+/* ---- EVENTS ---- */
+function addEvent(){
+  const day  = parseInt(document.getElementById('ev-day').value);
+  const desc = document.getElementById('ev-desc').value.trim();
+  const time = document.getElementById('ev-time').value;
+  if(!day||!desc){alert('Preencha o dia e a descrição!');return;}
+  events.push({day,desc,time,color:evColor});
+  events.sort((a,b)=>a.day-b.day);
+  document.getElementById('ev-day').value='';
+  document.getElementById('ev-desc').value='';
+  document.getElementById('ev-time').value='';
+  renderAll();
+}
+function removeEvent(i){ events.splice(i,1); renderAll(); }
+
+function renderAll(){ renderList(); renderCalendar(); renderCards(); }
+
+function renderList(){
+  const el=document.getElementById('ev-list');
+  if(!events.length){el.innerHTML='<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">Nenhum evento ainda.</div>';return;}
+  el.innerHTML=events.map((ev,i)=>`
+    <div class="ev-item">
+      <div class="ev-dot" style="background:${ev.color}"></div>
+      <div class="ev-info">
+        <div class="ev-day">Dia ${ev.day}${ev.time?' · '+ev.time:''}</div>
+        <div class="ev-desc">${ev.desc}</div>
+      </div>
+      <button class="btn-rm" onclick="removeEvent(${i})">×</button>
+    </div>`).join('');
+}
+
+function renderCalendar(){
+  const month = parseInt(document.getElementById('sel-month').value);
+  const year  = parseInt(document.getElementById('sel-year').value);
+  document.getElementById('ag-month-el').textContent = MONTHS_UP[month];
+
+  document.getElementById('cal-head').innerHTML = DAYS_PT.map(d=>`<div style="opacity:.55;font-size:13px">${d}</div>`).join('');
+
+  const grid     = document.getElementById('cal-grid');
+  const firstDay = new Date(year,month,1).getDay();
+  const total    = new Date(year,month+1,0).getDate();
+
+  let html='';
+  for(let i=0;i<firstDay;i++) html+='<div></div>';
+  for(let d=1;d<=total;d++){
+    const ev=events.find(e=>e.day===d);
+    if(ev){
+      html+=`<div class="cal-cell"><div style="background:${ev.color};color:#fff;font-weight:800;font-size:14px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center">${d}</div></div>`;
+    } else {
+      html+=`<div class="cal-cell">${d}</div>`;
+    }
+  }
+  grid.innerHTML=html;
+}
+
+function renderCards(){
+  const dark    = bgColor==='#1A202C';
+  const cardBg  = dark?'rgba(255,255,255,.1)':'rgba(255,255,255,.82)';
+  const cardCol = dark?'#F7FAFC':'#2D3748';
+  document.getElementById('ev-cards').innerHTML=events.map(ev=>`
+    <div class="ev-card">
+      <div class="ev-bar" style="background:${ev.color}"></div>
+      <div class="ev-content" style="background:${cardBg};color:${cardCol}">
+        <span class="ev-num">${String(ev.day).padStart(2,'0')}</span>
+        <span class="ev-pipe">|</span>
+        ${ev.desc.toUpperCase()}${ev.time?'  ·  '+ev.time:''}
+      </div>
+    </div>`).join('');
+}
+
+/* ---- LOGO ---- */
+function handleLogo(input){
+  const file=input.files[0]; if(!file) return;
+  document.getElementById('logo-fname').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    logoDataUrl=e.target.result;
+    const img=document.getElementById('footer-logo');
+    img.src=logoDataUrl; img.style.display='block';
+    document.getElementById('footer-text').style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+function removeLogo(){
+  logoDataUrl=null;
+  const img=document.getElementById('footer-logo');
+  img.src=''; img.style.display='none';
+  document.getElementById('footer-text').style.display='block';
+  document.getElementById('logo-fname').textContent='';
+}
+function updateFooterText(){
+  if(!logoDataUrl) document.getElementById('footer-text').textContent=document.getElementById('org-name').value||'UMA DIADEMA';
+}
+
+/* ---- EXPORT ---- */
+function exportPNG(){
+  const status=document.getElementById('exp-status');
+  status.textContent='Gerando imagem...';
+  const el    = document.getElementById('agenda-html');
+  const month = parseInt(document.getElementById('sel-month').value);
+  const year  = document.getElementById('sel-year').value;
+
+  html2canvas(el,{
+    scale:2, useCORS:true, allowTaint:true,
+    backgroundColor:null, logging:false
+  }).then(canvas=>{
+    const link=document.createElement('a');
+    link.download=`agenda-${MONTHS_PT[month].toLowerCase()}-${year}.png`;
+    link.href=canvas.toDataURL('image/png',1.0);
+    link.click();
+    status.textContent='✅ Download iniciado!';
+    setTimeout(()=>status.textContent='',3000);
+  }).catch(err=>{
+    status.textContent='Erro: '+err.message;
+    console.error(err);
+  });
+}
+
+/* ---- LISTENERS ---- */
+document.getElementById('sel-month').addEventListener('change',renderAll);
+document.getElementById('sel-year').addEventListener('input',renderAll);
+document.getElementById('org-name').addEventListener('input',updateFooterText);
+
+renderAll();
+</script>
+</body>
+</html>
