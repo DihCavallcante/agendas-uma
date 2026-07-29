@@ -436,13 +436,16 @@ function updateFooterText(){
   if(!logoDataUrl) document.getElementById('footer-text').textContent=document.getElementById('org-name').value||'UMA DIADEMA';
 }
 
-/* ---- HISTÓRICO (persistente entre sessões) ---- */
+/* ---- HISTÓRICO (persistente entre sessões, salvo no navegador) ---- */
 function storageAvailable(){
-  return typeof window !== 'undefined' && window.storage &&
-    typeof window.storage.list === 'function' &&
-    typeof window.storage.get === 'function' &&
-    typeof window.storage.set === 'function' &&
-    typeof window.storage.delete === 'function';
+  try{
+    const testKey = '__agenda_ls_test__';
+    localStorage.setItem(testKey, '1');
+    localStorage.removeItem(testKey);
+    return true;
+  }catch(e){
+    return false;
+  }
 }
 
 function gatherState(){
@@ -493,10 +496,10 @@ function applyState(st){
   renderAll();
 }
 
-async function saveHistory(){
+function saveHistory(){
   const status = document.getElementById('hist-status');
   if(!storageAvailable()){
-    status.textContent = '⚠️ Histórico só funciona no preview do Claude, não em arquivo baixado.';
+    status.textContent = '⚠️ Este navegador não permite salvar localmente (localStorage bloqueado).';
     return;
   }
   try{
@@ -504,8 +507,7 @@ async function saveHistory(){
     const state = gatherState();
     state.savedAt = new Date().toISOString();
     state.label   = `${MONTHS_PT[parseInt(state.month)]} ${state.year}`;
-    const res = await window.storage.set(`agenda-history:${id}`, JSON.stringify(state), false);
-    if(!res){ throw new Error('operação retornou vazio'); }
+    localStorage.setItem(`agenda-history:${id}`, JSON.stringify(state));
     status.textContent = '✅ Salvo no histórico!';
     setTimeout(()=>status.textContent='',2500);
     renderHistoryList();
@@ -515,17 +517,15 @@ async function saveHistory(){
   }
 }
 
-async function renderHistoryList(){
+function renderHistoryList(){
   const el = document.getElementById('hist-list');
   if(!el) return;
   if(!storageAvailable()){
-    el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">⚠️ Histórico indisponível: abra este artefato dentro do chat do Claude (não como arquivo baixado).</div>';
+    el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">⚠️ Este navegador não permite salvar localmente (localStorage bloqueado ou modo privado).</div>';
     return;
   }
-  el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">Carregando histórico...</div>';
   try{
-    const list = await window.storage.list('agenda-history:', false);
-    const keys = (list && list.keys) ? list.keys : [];
+    const keys = Object.keys(localStorage).filter(k=>k.startsWith('agenda-history:'));
     if(!keys.length){
       el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">Nenhuma agenda salva ainda.</div>';
       return;
@@ -533,8 +533,8 @@ async function renderHistoryList(){
     const items = [];
     for(const k of keys){
       try{
-        const r = await window.storage.get(k, false);
-        if(r) items.push({key:k, data: JSON.parse(r.value)});
+        const raw = localStorage.getItem(k);
+        if(raw) items.push({key:k, data: JSON.parse(raw)});
       }catch(e){ /* ignora item corrompido */ }
     }
     items.sort((a,b)=> b.key.localeCompare(a.key));
@@ -587,11 +587,11 @@ function requestDeleteEntry(key, btn){
   }
 }
 
-async function performDeleteEntry(key){
+function performDeleteEntry(key){
   const status = document.getElementById('hist-status');
-  if(!storageAvailable()){ status.textContent='⚠️ Histórico indisponível fora do preview do Claude.'; return; }
+  if(!storageAvailable()){ status.textContent='⚠️ localStorage indisponível neste navegador.'; return; }
   try{
-    await window.storage.delete(key, false);
+    localStorage.removeItem(key);
     selectedHistoryKeys.delete(key);
     status.textContent = '✅ Excluído!';
     setTimeout(()=>status.textContent='',2000);
@@ -604,7 +604,7 @@ async function performDeleteEntry(key){
 
 function deleteSelectedHistory(){
   const status = document.getElementById('hist-status');
-  if(!storageAvailable()){ status.textContent='⚠️ Histórico indisponível fora do preview do Claude.'; return; }
+  if(!storageAvailable()){ status.textContent='⚠️ localStorage indisponível neste navegador.'; return; }
   if(!selectedHistoryKeys.size){
     status.textContent = 'Selecione ao menos uma agenda no histórico para excluir.';
     setTimeout(()=>status.textContent='',2500);
@@ -628,11 +628,11 @@ function deleteSelectedHistory(){
   performBulkDelete();
 }
 
-async function performBulkDelete(){
+function performBulkDelete(){
   const status = document.getElementById('hist-status');
   try{
     for(const key of selectedHistoryKeys){
-      await window.storage.delete(key, false);
+      localStorage.removeItem(key);
     }
     status.textContent = '✅ Selecionados excluídos!';
     setTimeout(()=>status.textContent='',2500);
@@ -644,13 +644,13 @@ async function performBulkDelete(){
   renderHistoryList();
 }
 
-async function loadHistoryEntry(key){
+function loadHistoryEntry(key){
   const status = document.getElementById('hist-status');
-  if(!storageAvailable()){ status.textContent='⚠️ Histórico indisponível fora do preview do Claude.'; return; }
+  if(!storageAvailable()){ status.textContent='⚠️ localStorage indisponível neste navegador.'; return; }
   try{
-    const r = await window.storage.get(key, false);
-    if(!r) throw new Error('registro não encontrado');
-    applyState(JSON.parse(r.value));
+    const raw = localStorage.getItem(key);
+    if(!raw) throw new Error('registro não encontrado');
+    applyState(JSON.parse(raw));
     status.textContent = '✅ Agenda carregada!';
     setTimeout(()=>status.textContent='',2000);
   }catch(e){
