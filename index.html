@@ -30,6 +30,8 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 .ev-desc{color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn-rm{background:none;border:none;color:var(--color-text-secondary);cursor:pointer;padding:1px 4px;font-size:15px;line-height:1;border-radius:4px}
 .btn-rm:hover{color:#e53e3e}
+.btn-load{background:none;border:none;color:#553C9A;cursor:pointer;padding:1px 5px;font-size:14px;line-height:1;border-radius:4px}
+.btn-load:hover{color:#3d2a75}
 .divider{height:0.5px;background:var(--color-border-tertiary);margin:10px 0}
 .preview{padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;background:var(--color-background-secondary)}
 .prev-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--color-text-secondary);align-self:flex-start}
@@ -43,6 +45,12 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 .font-card.sel{border-color:#553C9A;background:rgba(85,60,154,.08)}
 .font-card .fc-name{font-size:9px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
 .font-card .fc-preview{font-size:17px;line-height:1.1}
+
+/* Histórico */
+.hist-item{display:flex;align-items:center;gap:4px;padding:7px 9px;border-radius:var(--border-radius-md);background:var(--color-background-secondary);margin-bottom:5px;font-size:11px}
+.hist-info{flex:1;min-width:0}
+.hist-label{font-weight:800;font-size:12px}
+.hist-date{color:var(--color-text-secondary);font-size:10px}
 
 /* ===== AGENDA HTML ===== */
 #agenda-html{
@@ -213,6 +221,7 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
     <input type="color" id="ev-custom-color" value="#9B5DE5" style="width:26px;height:26px;border-radius:50%;padding:1px;border:2px solid transparent;cursor:pointer" oninput="customColor(this.value)">
   </div>
   <button class="btn-add" onclick="addEvent()">+ Adicionar Evento</button>
+  <div id="ev-add-status" style="font-size:11px;text-align:center;margin-top:4px;color:#e53e3e"></div>
 
   <div class="divider"></div>
   <div class="lbl">Eventos</div>
@@ -227,8 +236,22 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
   </div>
   <button style="width:100%;margin-top:6px;padding:5px;background:none;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;color:var(--color-text-secondary)" onclick="removeLogo()">× Remover logo</button>
 
+  <div class="lbl">Qualidade da Exportação</div>
+  <select id="export-scale">
+    <option value="2">Normal (2x)</option>
+    <option value="3" selected>Alta (3x)</option>
+    <option value="4">Máxima (4x)</option>
+  </select>
+
   <button class="btn-exp" onclick="exportPNG()">⬇ Gerar e Baixar PNG</button>
   <div id="exp-status" style="font-size:11px;text-align:center;margin-top:6px;color:var(--color-text-secondary)"></div>
+
+  <div class="divider"></div>
+  <div class="lbl">Histórico de Agendas</div>
+  <button class="btn-add" style="background:#553C9A" onclick="saveHistory()">💾 Salvar estado atual</button>
+  <div id="hist-status" style="font-size:11px;text-align:center;margin-top:5px;color:var(--color-text-secondary)"></div>
+  <button class="btn-add" id="btn-delete-selected" style="background:#e53e3e;margin-top:8px" onclick="deleteSelectedHistory()">🗑 Excluir selecionados</button>
+  <div id="hist-list" style="margin-top:8px"></div>
 </div>
 
 <!-- PREVIEW -->
@@ -318,7 +341,13 @@ function addEvent(){
   const day  = parseInt(document.getElementById('ev-day').value);
   const desc = document.getElementById('ev-desc').value.trim();
   const time = document.getElementById('ev-time').value;
-  if(!day||!desc){alert('Preencha o dia e a descrição!');return;}
+  const status = document.getElementById('ev-add-status');
+  if(!day||!desc){
+    status.textContent = 'Preencha o dia e a descrição!';
+    setTimeout(()=>status.textContent='',2500);
+    return;
+  }
+  status.textContent='';
   events.push({day,desc,time,color:evColor});
   events.sort((a,b)=>a.day-b.day);
   document.getElementById('ev-day').value='';
@@ -407,6 +436,229 @@ function updateFooterText(){
   if(!logoDataUrl) document.getElementById('footer-text').textContent=document.getElementById('org-name').value||'UMA DIADEMA';
 }
 
+/* ---- HISTÓRICO (persistente entre sessões) ---- */
+function storageAvailable(){
+  return typeof window !== 'undefined' && window.storage &&
+    typeof window.storage.list === 'function' &&
+    typeof window.storage.get === 'function' &&
+    typeof window.storage.set === 'function' &&
+    typeof window.storage.delete === 'function';
+}
+
+function gatherState(){
+  return {
+    month: document.getElementById('sel-month').value,
+    year: document.getElementById('sel-year').value,
+    orgName: document.getElementById('org-name').value,
+    bgColor, evColor, titleFont, monthFont,
+    events: JSON.parse(JSON.stringify(events)),
+    logoDataUrl
+  };
+}
+
+function applyState(st){
+  document.getElementById('sel-month').value = st.month;
+  document.getElementById('sel-year').value = st.year;
+  document.getElementById('org-name').value = st.orgName || 'UMA DIADEMA';
+
+  bgColor    = st.bgColor    || '#E8E4DC';
+  evColor    = st.evColor    || '#9B5DE5';
+  titleFont  = st.titleFont  || 'Bebas Neue';
+  monthFont  = st.monthFont  || 'Dancing Script';
+  events     = st.events     || [];
+  logoDataUrl= st.logoDataUrl|| null;
+
+  document.querySelectorAll('.bgsw').forEach(s=>s.classList.toggle('sel', s.dataset.v===bgColor));
+  document.getElementById('bg-custom').value = bgColor;
+  document.querySelectorAll('#ev-swatches .sw').forEach(s=>s.classList.toggle('sel', s.dataset.v===evColor));
+  document.getElementById('ev-custom-color').value = evColor;
+  document.querySelectorAll('#title-fonts .font-card').forEach(s=>s.classList.toggle('sel', s.dataset.font===titleFont));
+  document.querySelectorAll('#month-fonts .font-card').forEach(s=>s.classList.toggle('sel', s.dataset.font===monthFont));
+
+  document.getElementById('ag-title-el').style.fontFamily = `'${titleFont}',sans-serif`;
+  document.getElementById('footer-text').style.fontFamily = `'${titleFont}',sans-serif`;
+  document.getElementById('ag-month-el').style.fontFamily = `'${monthFont}',cursive`;
+
+  const img = document.getElementById('footer-logo');
+  if(logoDataUrl){
+    img.src = logoDataUrl; img.style.display='block';
+    document.getElementById('footer-text').style.display='none';
+  } else {
+    img.src=''; img.style.display='none';
+    document.getElementById('footer-text').style.display='block';
+    updateFooterText();
+  }
+
+  applyBg();
+  renderAll();
+}
+
+async function saveHistory(){
+  const status = document.getElementById('hist-status');
+  if(!storageAvailable()){
+    status.textContent = '⚠️ Histórico só funciona no preview do Claude, não em arquivo baixado.';
+    return;
+  }
+  try{
+    const id    = Date.now().toString();
+    const state = gatherState();
+    state.savedAt = new Date().toISOString();
+    state.label   = `${MONTHS_PT[parseInt(state.month)]} ${state.year}`;
+    const res = await window.storage.set(`agenda-history:${id}`, JSON.stringify(state), false);
+    if(!res){ throw new Error('operação retornou vazio'); }
+    status.textContent = '✅ Salvo no histórico!';
+    setTimeout(()=>status.textContent='',2500);
+    renderHistoryList();
+  }catch(e){
+    console.error(e);
+    status.textContent = 'Erro ao salvar: '+e.message;
+  }
+}
+
+async function renderHistoryList(){
+  const el = document.getElementById('hist-list');
+  if(!el) return;
+  if(!storageAvailable()){
+    el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">⚠️ Histórico indisponível: abra este artefato dentro do chat do Claude (não como arquivo baixado).</div>';
+    return;
+  }
+  el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">Carregando histórico...</div>';
+  try{
+    const list = await window.storage.list('agenda-history:', false);
+    const keys = (list && list.keys) ? list.keys : [];
+    if(!keys.length){
+      el.innerHTML = '<div style="font-size:11px;color:var(--color-text-secondary);padding:6px 0">Nenhuma agenda salva ainda.</div>';
+      return;
+    }
+    const items = [];
+    for(const k of keys){
+      try{
+        const r = await window.storage.get(k, false);
+        if(r) items.push({key:k, data: JSON.parse(r.value)});
+      }catch(e){ /* ignora item corrompido */ }
+    }
+    items.sort((a,b)=> b.key.localeCompare(a.key));
+    el.innerHTML = items.map(it=>{
+      let dateStr='';
+      try{ dateStr = new Date(it.data.savedAt).toLocaleString('pt-BR'); }catch(e){}
+      const checked = selectedHistoryKeys.has(it.key) ? 'checked' : '';
+      return `<div class="hist-item">
+        <input type="checkbox" class="hist-check" data-key="${it.key}" ${checked} onchange="toggleHistorySelect('${it.key}', this.checked)">
+        <div class="hist-info">
+          <div class="hist-label">${it.data.label || 'Agenda'}</div>
+          <div class="hist-date">${dateStr}</div>
+        </div>
+        <button class="btn-load" title="Carregar" onclick="loadHistoryEntry('${it.key}')">↺</button>
+        <button class="btn-rm" title="Excluir" onclick="requestDeleteEntry('${it.key}', this)">×</button>
+      </div>`;
+    }).join('');
+  }catch(e){
+    console.error(e);
+    el.innerHTML = '<div style="font-size:11px;color:#e53e3e;padding:6px 0">Erro ao carregar histórico.</div>';
+  }
+}
+
+let selectedHistoryKeys = new Set();
+let pendingDeleteConfirm = new Set();
+let bulkDeletePending = false;
+
+function toggleHistorySelect(key, checked){
+  if(checked) selectedHistoryKeys.add(key);
+  else selectedHistoryKeys.delete(key);
+}
+
+function requestDeleteEntry(key, btn){
+  if(pendingDeleteConfirm.has(key)){
+    pendingDeleteConfirm.delete(key);
+    performDeleteEntry(key);
+  } else {
+    pendingDeleteConfirm.add(key);
+    btn.textContent = '✓?';
+    btn.style.color = '#e53e3e';
+    btn.title = 'Clique de novo para confirmar';
+    setTimeout(()=>{
+      if(pendingDeleteConfirm.has(key)){
+        pendingDeleteConfirm.delete(key);
+        btn.textContent = '×';
+        btn.style.color = '';
+        btn.title = 'Excluir';
+      }
+    }, 3500);
+  }
+}
+
+async function performDeleteEntry(key){
+  const status = document.getElementById('hist-status');
+  if(!storageAvailable()){ status.textContent='⚠️ Histórico indisponível fora do preview do Claude.'; return; }
+  try{
+    await window.storage.delete(key, false);
+    selectedHistoryKeys.delete(key);
+    status.textContent = '✅ Excluído!';
+    setTimeout(()=>status.textContent='',2000);
+    renderHistoryList();
+  }catch(e){
+    console.error(e);
+    status.textContent = 'Erro ao excluir: '+e.message;
+  }
+}
+
+function deleteSelectedHistory(){
+  const status = document.getElementById('hist-status');
+  if(!storageAvailable()){ status.textContent='⚠️ Histórico indisponível fora do preview do Claude.'; return; }
+  if(!selectedHistoryKeys.size){
+    status.textContent = 'Selecione ao menos uma agenda no histórico para excluir.';
+    setTimeout(()=>status.textContent='',2500);
+    return;
+  }
+  const btn = document.getElementById('btn-delete-selected');
+  if(!bulkDeletePending){
+    bulkDeletePending = true;
+    const n = selectedHistoryKeys.size;
+    btn.textContent = `Confirmar exclusão de ${n}?`;
+    setTimeout(()=>{
+      if(bulkDeletePending){
+        bulkDeletePending = false;
+        btn.textContent = '🗑 Excluir selecionados';
+      }
+    }, 4000);
+    return;
+  }
+  bulkDeletePending = false;
+  btn.textContent = '🗑 Excluir selecionados';
+  performBulkDelete();
+}
+
+async function performBulkDelete(){
+  const status = document.getElementById('hist-status');
+  try{
+    for(const key of selectedHistoryKeys){
+      await window.storage.delete(key, false);
+    }
+    status.textContent = '✅ Selecionados excluídos!';
+    setTimeout(()=>status.textContent='',2500);
+  }catch(e){
+    console.error(e);
+    status.textContent = 'Erro ao excluir alguns itens: '+e.message;
+  }
+  selectedHistoryKeys.clear();
+  renderHistoryList();
+}
+
+async function loadHistoryEntry(key){
+  const status = document.getElementById('hist-status');
+  if(!storageAvailable()){ status.textContent='⚠️ Histórico indisponível fora do preview do Claude.'; return; }
+  try{
+    const r = await window.storage.get(key, false);
+    if(!r) throw new Error('registro não encontrado');
+    applyState(JSON.parse(r.value));
+    status.textContent = '✅ Agenda carregada!';
+    setTimeout(()=>status.textContent='',2000);
+  }catch(e){
+    console.error(e);
+    status.textContent = 'Erro ao carregar: '+e.message;
+  }
+}
+
 /* ---- EXPORT ---- */
 function exportPNG(){
   const status=document.getElementById('exp-status');
@@ -415,18 +667,32 @@ function exportPNG(){
   const month = parseInt(document.getElementById('sel-month').value);
   const year  = document.getElementById('sel-year').value;
 
+  const scale = parseInt(document.getElementById('export-scale').value) || 2;
+
   html2canvas(el,{
-    scale:2, useCORS:true, allowTaint:true,
+    scale:scale, useCORS:true, allowTaint:false,
     backgroundColor:null, logging:false
   }).then(canvas=>{
-    const link=document.createElement('a');
-    link.download=`agenda-${MONTHS_PT[month].toLowerCase()}-${year}.png`;
-    link.href=canvas.toDataURL('image/png',1.0);
-    link.click();
-    status.textContent='✅ Download iniciado!';
-    setTimeout(()=>status.textContent='',3000);
+    canvas.toBlob(blob=>{
+      if(!blob){
+        status.textContent='Erro: não foi possível gerar a imagem (blob vazio).';
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `agenda-${MONTHS_PT[month].toLowerCase()}-${year}.png`;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      status.textContent='✅ Download iniciado!';
+      setTimeout(()=>status.textContent='',3000);
+      // salva automaticamente no histórico ao gerar/baixar
+      saveHistory();
+    }, 'image/png', 1.0);
   }).catch(err=>{
-    status.textContent='Erro: '+err.message;
+    status.textContent='Erro ao gerar imagem: '+err.message;
     console.error(err);
   });
 }
@@ -437,6 +703,7 @@ document.getElementById('sel-year').addEventListener('input',renderAll);
 document.getElementById('org-name').addEventListener('input',updateFooterText);
 
 renderAll();
+renderHistoryList();
 </script>
 </body>
 </html>
