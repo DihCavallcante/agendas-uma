@@ -30,6 +30,10 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 .ev-desc{color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn-rm{background:none;border:none;color:var(--color-text-secondary);cursor:pointer;padding:1px 4px;font-size:15px;line-height:1;border-radius:4px}
 .btn-rm:hover{color:#e53e3e}
+.btn-gcal{background:none;border:none;color:var(--color-text-secondary);cursor:pointer;padding:1px 4px;font-size:13px;line-height:1;border-radius:4px;text-decoration:none;display:inline-flex;align-items:center}
+.btn-gcal:hover{color:#4285F4}
+.btn-ics{width:100%;padding:9px;background:#4285F4;color:#fff;border:none;border-radius:var(--border-radius-md);font-family:'Nunito',sans-serif;font-weight:800;font-size:12px;cursor:pointer;margin-top:8px}
+.btn-ics:hover{background:#3367D6}
 .btn-load{background:none;border:none;color:#553C9A;cursor:pointer;padding:1px 5px;font-size:14px;line-height:1;border-radius:4px}
 .btn-load:hover{color:#3d2a75}
 .divider{height:0.5px;background:var(--color-border-tertiary);margin:10px 0}
@@ -116,12 +120,12 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
     <select id="sel-month" style="flex:2">
       <option value="0">Janeiro</option><option value="1">Fevereiro</option>
       <option value="2">Março</option><option value="3">Abril</option>
-      <option value="4">Maio</option><option value="5" selected>Junho</option>
+      <option value="4">Maio</option><option value="5">Junho</option>
       <option value="6">Julho</option><option value="7">Agosto</option>
       <option value="8">Setembro</option><option value="9">Outubro</option>
       <option value="10">Novembro</option><option value="11">Dezembro</option>
     </select>
-    <input type="number" id="sel-year" value="2025" min="2020" max="2040" style="flex:1">
+    <input type="number" id="sel-year" min="2020" max="2040" style="flex:1">
   </div>
 
   <div class="lbl">Nome da Organização</div>
@@ -218,6 +222,9 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
     <div class="sw" style="background:#EF233C" data-v="#EF233C" onclick="pickColor(this)"></div>
     <div class="sw" style="background:#3A86FF" data-v="#3A86FF" onclick="pickColor(this)"></div>
     <div class="sw" style="background:#2D6A4F" data-v="#2D6A4F" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#7A1F3D" data-v="#7A1F3D" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#F72585" data-v="#F72585" onclick="pickColor(this)"></div>
+    <div class="sw" style="background:#001845" data-v="#001845" onclick="pickColor(this)"></div>
     <input type="color" id="ev-custom-color" value="#9B5DE5" style="width:26px;height:26px;border-radius:50%;padding:1px;border:2px solid transparent;cursor:pointer" oninput="customColor(this.value)">
   </div>
   <button class="btn-add" onclick="addEvent()">+ Adicionar Evento</button>
@@ -245,6 +252,10 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 
   <button class="btn-exp" onclick="exportPNG()">⬇ Gerar e Baixar PNG</button>
   <div id="exp-status" style="font-size:11px;text-align:center;margin-top:6px;color:var(--color-text-secondary)"></div>
+
+  <button class="btn-ics" onclick="downloadICS()">📅 Baixar Agenda (.ics)</button>
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Envie esse arquivo no grupo — ao abrir no celular, a pessoa pode importar todos os eventos do mês de uma vez no Google Agenda ou Apple Calendar.</div>
+  <div id="ics-status" style="font-size:11px;text-align:center;margin-top:4px;color:var(--color-text-secondary)"></div>
 
   <div class="divider"></div>
   <div class="lbl">Histórico de Agendas</div>
@@ -369,7 +380,8 @@ function renderList(){
         <div class="ev-day">Dia ${ev.day}${ev.time?' · '+ev.time:''}</div>
         <div class="ev-desc">${ev.desc}</div>
       </div>
-      <button class="btn-rm" onclick="removeEvent(${i})">×</button>
+      <a class="btn-gcal" href="${googleCalendarUrl(ev)}" target="_blank" rel="noopener" title="Adicionar este evento ao Google Agenda">📅</a>
+      <button class="btn-rm" onclick="removeEvent(${i})" title="Remover">×</button>
     </div>`).join('');
 }
 
@@ -410,6 +422,93 @@ function renderCards(){
         ${ev.desc.toUpperCase()}${ev.time?'  ·  '+ev.time:''}
       </div>
     </div>`).join('');
+}
+
+/* ---- GOOGLE AGENDA / ICS ---- */
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+// Calcula início/fim do evento no formato exigido (com ou sem horário)
+function eventDateRange(ev){
+  const month = parseInt(document.getElementById('sel-month').value);
+  const year  = parseInt(document.getElementById('sel-year').value);
+  const y = year, m = month+1, d = ev.day;
+
+  if(ev.time){
+    const [hh,mm] = ev.time.split(':').map(Number);
+    const start = `${y}${pad2(m)}${pad2(d)}T${pad2(hh)}${pad2(mm)}00`;
+    // sem duração: fim = início (usuário ajusta o horário final direto no Google Agenda, se quiser)
+    const end = start;
+    return {start, end, allDay:false};
+  } else {
+    const start = `${y}${pad2(m)}${pad2(d)}`;
+    const endDate = new Date(y, m-1, d+1); // dia seguinte (exclusivo, exigido pelo padrão)
+    const end = `${endDate.getFullYear()}${pad2(endDate.getMonth()+1)}${pad2(endDate.getDate())}`;
+    return {start, end, allDay:true};
+  }
+}
+
+// Monta o link "quick add" do Google Agenda para 1 evento (não precisa de servidor)
+function googleCalendarUrl(ev){
+  const {start,end} = eventDateRange(ev);
+  const orgName = document.getElementById('org-name').value || '';
+  const params = new URLSearchParams({
+    action:'TEMPLATE',
+    text: ev.desc,
+    dates: `${start}/${end}`,
+    details: orgName ? `Evento da agenda ${orgName}` : ''
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function icsEscape(str){
+  return String(str).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+}
+
+// Gera um .ics com todos os eventos do mês para importação em lote
+function downloadICS(){
+  const status = document.getElementById('ics-status');
+  if(!events.length){
+    status.textContent = 'Adicione ao menos um evento antes de exportar.';
+    setTimeout(()=>status.textContent='',2500);
+    return;
+  }
+  const orgName = document.getElementById('org-name').value || 'Agenda';
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}T${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}Z`;
+  const uidBase = orgName.replace(/\s+/g,'').toLowerCase().replace(/[^\w-]/g,'') || 'agenda';
+
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//'+uidBase+'//Agenda//PT\r\nCALSCALE:GREGORIAN\r\n';
+  events.forEach((ev,i)=>{
+    const {start,end,allDay} = eventDateRange(ev);
+    ics += 'BEGIN:VEVENT\r\n';
+    ics += `UID:${stamp}-${i}@${uidBase}\r\n`;
+    ics += `DTSTAMP:${stamp}\r\n`;
+    if(allDay){
+      ics += `DTSTART;VALUE=DATE:${start}\r\n`;
+      ics += `DTEND;VALUE=DATE:${end}\r\n`;
+    } else {
+      ics += `DTSTART:${start}\r\n`;
+      ics += `DTEND:${end}\r\n`;
+    }
+    ics += `SUMMARY:${icsEscape(ev.desc)}\r\n`;
+    if(orgName) ics += `DESCRIPTION:${icsEscape(orgName)}\r\n`;
+    ics += 'END:VEVENT\r\n';
+  });
+  ics += 'END:VCALENDAR\r\n';
+
+  const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const month = parseInt(document.getElementById('sel-month').value);
+  const year  = document.getElementById('sel-year').value;
+  const link = document.createElement('a');
+  link.download = `agenda-${MONTHS_PT[month].toLowerCase()}-${year}.ics`;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  status.textContent = '✅ Arquivo .ics baixado!';
+  setTimeout(()=>status.textContent='',3000);
 }
 
 /* ---- LOGO ---- */
@@ -701,6 +800,13 @@ function exportPNG(){
 document.getElementById('sel-month').addEventListener('change',renderAll);
 document.getElementById('sel-year').addEventListener('input',renderAll);
 document.getElementById('org-name').addEventListener('input',updateFooterText);
+
+/* ---- Abre já no mês/ano atual ---- */
+(function initCurrentMonthYear(){
+  const today = new Date();
+  document.getElementById('sel-month').value = today.getMonth();
+  document.getElementById('sel-year').value  = today.getFullYear();
+})();
 
 renderAll();
 renderHistoryList();
