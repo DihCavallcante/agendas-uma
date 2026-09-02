@@ -468,6 +468,26 @@ function icsEscape(str){
   return String(str).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
 }
 
+// RFC 5545: linha de propriedade não pode passar de 75 octets — linhas maiores
+// precisam ser "dobradas" (CRLF + espaço no início da continuação). O iOS/QuickLook
+// é mais rígido com isso do que a maioria dos apps de calendário do Android/Google;
+// um .ics fora do padrão pode fazer o iOS mostrar só um preview de texto em vez da
+// tela nativa "Adicionar à Agenda".
+function icsFoldLine(line){
+  const CHUNK = 73; // margem de segurança para acentos/caracteres multibyte
+  if(line.length <= CHUNK) return line;
+  let out = line.slice(0, CHUNK);
+  let rest = line.slice(CHUNK);
+  while(rest.length){
+    out += '\r\n ' + rest.slice(0, CHUNK);
+    rest = rest.slice(CHUNK);
+  }
+  return out;
+}
+function icsLine(name, value){
+  return icsFoldLine(`${name}:${value}`) + '\r\n';
+}
+
 /* ---- Detecção de plataforma/navegador ---- */
 function isIOS(){
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -482,45 +502,66 @@ function buildICS(evList, orgName){
   const stamp = `${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}T${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}Z`;
   const uidBase = (orgName||'agenda').replace(/\s+/g,'').toLowerCase().replace(/[^\w-]/g,'') || 'agenda';
 
-  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//'+uidBase+'//Agenda//PT\r\nCALSCALE:GREGORIAN\r\n';
+  let ics = 'BEGIN:VCALENDAR\r\n';
+  ics += icsLine('VERSION','2.0');
+  ics += icsLine('PRODID','-//'+uidBase+'//Agenda//PT');
+  ics += icsLine('CALSCALE','GREGORIAN');
+  ics += icsLine('METHOD','PUBLISH'); // ajuda o Calendário do iOS a reconhecer o arquivo e oferecer "Adicionar" direto
   evList.forEach((ev,i)=>{
     const {start,end,allDay} = eventDateRange(ev);
     ics += 'BEGIN:VEVENT\r\n';
-    ics += `UID:${stamp}-${i}@${uidBase}\r\n`;
-    ics += `DTSTAMP:${stamp}\r\n`;
+    ics += icsLine('UID', `${stamp}-${i}@${uidBase}`);
+    ics += icsLine('DTSTAMP', stamp);
     if(allDay){
-      ics += `DTSTART;VALUE=DATE:${start}\r\n`;
-      ics += `DTEND;VALUE=DATE:${end}\r\n`;
+      ics += icsLine('DTSTART;VALUE=DATE', start);
+      ics += icsLine('DTEND;VALUE=DATE', end);
     } else {
-      ics += `DTSTART:${start}\r\n`;
-      ics += `DTEND:${end}\r\n`;
+      ics += icsLine('DTSTART', start);
+      ics += icsLine('DTEND', end);
     }
-    ics += `SUMMARY:${icsEscape(ev.desc)}\r\n`;
-    if(orgName) ics += `DESCRIPTION:${icsEscape(orgName)}\r\n`;
+    ics += icsLine('SUMMARY', icsEscape(ev.desc));
+    if(orgName) ics += icsLine('DESCRIPTION', icsEscape(orgName));
     ics += 'END:VEVENT\r\n';
   });
   ics += 'END:VCALENDAR\r\n';
   return ics;
 }
 
-// Abre/baixa o .ics da forma mais confiável pra cada plataforma
+
+// Abre/baixa o .ics da forma mais confiável pra cada plataforma.
+// Nada é hospedado em link fixo (GitHub etc.) — o arquivo/URL é gerado
+// na hora, no próprio navegador da pessoa, a partir do Blob do .ics.
 function openICS(icsContent, filenameBase, statusEl){
+  const blob = new Blob([icsContent], {type:'text/calendar;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+
   if(isIOS()){
-    // iOS: abrir como data: URI dispara a tela nativa "Adicionar à Agenda" do Calendário
-    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icsContent);
-    window.location.href = dataUri;
+    // iPhone: abrir o Blob em nova aba faz o Safari mostrar a tela nativa
+    // "Adicionar à Agenda". O antigo esquema "data:" URI via window.location.href
+    // é bloqueado pelo Safari em várias versões do iOS — por isso não funcionava.
+    const win = window.open(url, '_blank');
+    if(!win){
+      // Se o pop-up for bloqueado, cai para um link clicado (mantém o gesto do usuário)
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   } else {
     // Android / Desktop: download normal do arquivo .ics
-    const blob = new Blob([icsContent], {type:'text/calendar;charset=utf-8'});
-    const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.download = `${filenameBase}.ics`;
     link.href = url;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    setTimeout(()=>URL.revokeObjectURL(url), 4000);
   }
+  // Revoga depois de um tempo maior, dando tempo do Safari mobile carregar o Blob
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
+
   if(statusEl){
     statusEl.style.color = '';
     statusEl.textContent = isIOS() ? '✅ Toque em "Adicionar" na tela que abriu para confirmar.' : '✅ Arquivo baixado! Toque nele para confirmar na agenda.';
@@ -537,11 +578,10 @@ function addEventSmart(i){
   }
   const ev = events[i];
   if(isIOS()){
-    // iPhone: abre direto a tela do Calendário da Apple pronta pra adicionar
+    // iPhone: gera o .ics na hora (Blob) e abre a tela nativa "Adicionar à Agenda"
     const orgName = document.getElementById('org-name').value || 'Agenda';
     const ics = buildICS([ev], orgName);
-    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-    window.location.href = dataUri;
+    openICS(ics, `evento-dia-${ev.day}`, null);
   } else {
     // Android/Desktop: abre o Google Agenda já preenchido, só toca em Salvar
     window.open(googleCalendarUrl(ev), '_blank');
