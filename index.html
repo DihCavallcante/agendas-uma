@@ -254,7 +254,7 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
   <div id="exp-status" style="font-size:11px;text-align:center;margin-top:6px;color:var(--color-text-secondary)"></div>
 
   <button class="btn-ics" onclick="downloadICS()">📅 Baixar Agenda (.ics)</button>
-  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Envie esse arquivo no grupo — ao abrir no celular, a pessoa pode importar todos os eventos do mês de uma vez no Google Agenda ou Apple Calendar.</div>
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Funciona em qualquer agenda (Google, Apple Calendário, Outlook, Samsung...). No iPhone abre direto a tela de "Adicionar à Agenda"; no Android baixa o arquivo, é só abrir. <b>Importante:</b> se o link for aberto de dentro do WhatsApp/Instagram, toque em "Abrir no navegador" primeiro.</div>
   <div id="ics-status" style="font-size:11px;text-align:center;margin-top:4px;color:var(--color-text-secondary)"></div>
 
   <div class="divider"></div>
@@ -380,7 +380,8 @@ function renderList(){
         <div class="ev-day">Dia ${ev.day}${ev.time?' · '+ev.time:''}</div>
         <div class="ev-desc">${ev.desc}</div>
       </div>
-      <a class="btn-gcal" href="${googleCalendarUrl(ev)}" target="_blank" rel="noopener" title="Adicionar este evento ao Google Agenda">📅</a>
+      <a class="btn-gcal" href="${googleCalendarUrl(ev)}" target="_blank" rel="noopener" title="Adicionar ao Google Agenda">📅</a>
+      <button class="btn-gcal" onclick="addSingleEventToCalendar(${i})" title="Adicionar em qualquer outra agenda (Apple, Outlook, Samsung...)">🗓️</button>
       <button class="btn-rm" onclick="removeEvent(${i})" title="Remover">×</button>
     </div>`).join('');
 }
@@ -464,21 +465,22 @@ function icsEscape(str){
   return String(str).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
 }
 
-// Gera um .ics com todos os eventos do mês para importação em lote
-function downloadICS(){
-  const status = document.getElementById('ics-status');
-  if(!events.length){
-    status.textContent = 'Adicione ao menos um evento antes de exportar.';
-    setTimeout(()=>status.textContent='',2500);
-    return;
-  }
-  const orgName = document.getElementById('org-name').value || 'Agenda';
+/* ---- Detecção de plataforma/navegador ---- */
+function isIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isInAppBrowser(){
+  return /FBAN|FBAV|Instagram|Line\/|WhatsApp|MicroMessenger|TikTok/i.test(navigator.userAgent || '');
+}
+
+// Monta o conteúdo .ics (1 ou vários eventos)
+function buildICS(evList, orgName){
   const now = new Date();
   const stamp = `${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}T${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}Z`;
-  const uidBase = orgName.replace(/\s+/g,'').toLowerCase().replace(/[^\w-]/g,'') || 'agenda';
+  const uidBase = (orgName||'agenda').replace(/\s+/g,'').toLowerCase().replace(/[^\w-]/g,'') || 'agenda';
 
   let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//'+uidBase+'//Agenda//PT\r\nCALSCALE:GREGORIAN\r\n';
-  events.forEach((ev,i)=>{
+  evList.forEach((ev,i)=>{
     const {start,end,allDay} = eventDateRange(ev);
     ics += 'BEGIN:VEVENT\r\n';
     ics += `UID:${stamp}-${i}@${uidBase}\r\n`;
@@ -495,20 +497,64 @@ function downloadICS(){
     ics += 'END:VEVENT\r\n';
   });
   ics += 'END:VCALENDAR\r\n';
+  return ics;
+}
 
-  const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
-  const url  = URL.createObjectURL(blob);
+// Abre/baixa o .ics da forma mais confiável pra cada plataforma
+function openICS(icsContent, filenameBase, statusEl){
+  if(isInAppBrowser()){
+    if(statusEl){
+      statusEl.innerHTML = '⚠️ Você abriu esse link dentro do WhatsApp/Instagram. Toque nos <b>•••</b> (ou nos 3 pontinhos) no canto e escolha <b>"Abrir no navegador"</b> (Safari ou Chrome) antes de tentar de novo.';
+      statusEl.style.color = '#e53e3e';
+    }
+    return;
+  }
+  if(isIOS()){
+    // iOS: abrir como data: URI dispara a tela nativa "Adicionar à Agenda" do Calendário
+    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icsContent);
+    window.location.href = dataUri;
+  } else {
+    // Android / Desktop: download normal do arquivo .ics
+    const blob = new Blob([icsContent], {type:'text/calendar;charset=utf-8'});
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = `${filenameBase}.ics`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }
+  if(statusEl){
+    statusEl.style.color = '';
+    statusEl.textContent = isIOS() ? '✅ Toque em "Adicionar" na tela que abriu para confirmar.' : '✅ Arquivo .ics baixado! Abra-o para importar na agenda.';
+    setTimeout(()=>{ statusEl.textContent=''; }, 5000);
+  }
+}
+
+// Botão 🗓️ de cada evento — funciona em qualquer app de calendário (Apple, Outlook, Samsung, etc.)
+function addSingleEventToCalendar(i){
+  const ev = events[i];
+  const orgName = document.getElementById('org-name').value || 'Agenda';
+  const ics = buildICS([ev], orgName);
+  const status = document.getElementById('ics-status');
+  openICS(ics, `evento-dia-${ev.day}`, status);
+}
+
+// Gera um .ics com todos os eventos do mês para importação em lote
+function downloadICS(){
+  const status = document.getElementById('ics-status');
+  if(!events.length){
+    status.style.color = '';
+    status.textContent = 'Adicione ao menos um evento antes de exportar.';
+    setTimeout(()=>status.textContent='',2500);
+    return;
+  }
+  const orgName = document.getElementById('org-name').value || 'Agenda';
+  const ics = buildICS(events, orgName);
   const month = parseInt(document.getElementById('sel-month').value);
   const year  = document.getElementById('sel-year').value;
-  const link = document.createElement('a');
-  link.download = `agenda-${MONTHS_PT[month].toLowerCase()}-${year}.ics`;
-  link.href = url;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(()=>URL.revokeObjectURL(url), 4000);
-  status.textContent = '✅ Arquivo .ics baixado!';
-  setTimeout(()=>status.textContent='',3000);
+  openICS(ics, `agenda-${MONTHS_PT[month].toLowerCase()}-${year}`, status);
 }
 
 /* ---- LOGO ---- */
