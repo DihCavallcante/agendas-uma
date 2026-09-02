@@ -109,6 +109,10 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 </style>
 </head>
 <body>
+<div id="inapp-banner" style="display:none;position:sticky;top:0;z-index:999;background:#e53e3e;color:#fff;padding:12px 16px;text-align:center;font-family:'Nunito',sans-serif;font-weight:800;font-size:14px;line-height:1.5">
+  ⚠️ Para adicionar na agenda, abra este link fora do WhatsApp/Instagram.<br>
+  <span style="font-weight:600;font-size:13px">Toque nos <b>•••</b> ou <b>⋮</b> no topo da tela e escolha "Abrir no navegador".</span>
+</div>
 <div class="app">
 
 <!-- PAINEL -->
@@ -253,8 +257,8 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
   <button class="btn-exp" onclick="exportPNG()">⬇ Gerar e Baixar PNG</button>
   <div id="exp-status" style="font-size:11px;text-align:center;margin-top:6px;color:var(--color-text-secondary)"></div>
 
-  <button class="btn-ics" onclick="downloadICS()">📅 Baixar Agenda (.ics)</button>
-  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Funciona em qualquer agenda (Google, Apple Calendário, Outlook, Samsung...). No iPhone abre direto a tela de "Adicionar à Agenda"; no Android baixa o arquivo, é só abrir. <b>Importante:</b> se o link for aberto de dentro do WhatsApp/Instagram, toque em "Abrir no navegador" primeiro.</div>
+  <button class="btn-ics" onclick="downloadICS()">📅 Adicionar todos os eventos na minha agenda</button>
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Um toque adiciona o mês inteiro na agenda do celular (funciona no iPhone e no Android).</div>
   <div id="ics-status" style="font-size:11px;text-align:center;margin-top:4px;color:var(--color-text-secondary)"></div>
 
   <div class="divider"></div>
@@ -380,8 +384,7 @@ function renderList(){
         <div class="ev-day">Dia ${ev.day}${ev.time?' · '+ev.time:''}</div>
         <div class="ev-desc">${ev.desc}</div>
       </div>
-      <a class="btn-gcal" href="${googleCalendarUrl(ev)}" target="_blank" rel="noopener" title="Adicionar ao Google Agenda">📅</a>
-      <button class="btn-gcal" onclick="addSingleEventToCalendar(${i})" title="Adicionar em qualquer outra agenda (Apple, Outlook, Samsung...)">🗓️</button>
+      <button class="btn-gcal" onclick="addEventSmart(${i})" title="Adicionar este evento na minha agenda">📅+</button>
       <button class="btn-rm" onclick="removeEvent(${i})" title="Remover">×</button>
     </div>`).join('');
 }
@@ -502,13 +505,6 @@ function buildICS(evList, orgName){
 
 // Abre/baixa o .ics da forma mais confiável pra cada plataforma
 function openICS(icsContent, filenameBase, statusEl){
-  if(isInAppBrowser()){
-    if(statusEl){
-      statusEl.innerHTML = '⚠️ Você abriu esse link dentro do WhatsApp/Instagram. Toque nos <b>•••</b> (ou nos 3 pontinhos) no canto e escolha <b>"Abrir no navegador"</b> (Safari ou Chrome) antes de tentar de novo.';
-      statusEl.style.color = '#e53e3e';
-    }
-    return;
-  }
   if(isIOS()){
     // iOS: abrir como data: URI dispara a tela nativa "Adicionar à Agenda" do Calendário
     const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icsContent);
@@ -527,23 +523,39 @@ function openICS(icsContent, filenameBase, statusEl){
   }
   if(statusEl){
     statusEl.style.color = '';
-    statusEl.textContent = isIOS() ? '✅ Toque em "Adicionar" na tela que abriu para confirmar.' : '✅ Arquivo .ics baixado! Abra-o para importar na agenda.';
+    statusEl.textContent = isIOS() ? '✅ Toque em "Adicionar" na tela que abriu para confirmar.' : '✅ Arquivo baixado! Toque nele para confirmar na agenda.';
     setTimeout(()=>{ statusEl.textContent=''; }, 5000);
   }
 }
 
-// Botão 🗓️ de cada evento — funciona em qualquer app de calendário (Apple, Outlook, Samsung, etc.)
-function addSingleEventToCalendar(i){
+// Botão 📅+ de cada evento — 1 toque só, escolhe sozinho o melhor jeito pra cada aparelho
+function addEventSmart(i){
+  if(isInAppBrowser()){
+    document.getElementById('inapp-banner').style.display='block';
+    window.scrollTo({top:0, behavior:'smooth'});
+    return;
+  }
   const ev = events[i];
-  const orgName = document.getElementById('org-name').value || 'Agenda';
-  const ics = buildICS([ev], orgName);
-  const status = document.getElementById('ics-status');
-  openICS(ics, `evento-dia-${ev.day}`, status);
+  if(isIOS()){
+    // iPhone: abre direto a tela do Calendário da Apple pronta pra adicionar
+    const orgName = document.getElementById('org-name').value || 'Agenda';
+    const ics = buildICS([ev], orgName);
+    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    window.location.href = dataUri;
+  } else {
+    // Android/Desktop: abre o Google Agenda já preenchido, só toca em Salvar
+    window.open(googleCalendarUrl(ev), '_blank');
+  }
 }
 
 // Gera um .ics com todos os eventos do mês para importação em lote
 function downloadICS(){
   const status = document.getElementById('ics-status');
+  if(isInAppBrowser()){
+    document.getElementById('inapp-banner').style.display='block';
+    window.scrollTo({top:0, behavior:'smooth'});
+    return;
+  }
   if(!events.length){
     status.style.color = '';
     status.textContent = 'Adicione ao menos um evento antes de exportar.';
@@ -853,6 +865,11 @@ document.getElementById('org-name').addEventListener('input',updateFooterText);
   document.getElementById('sel-month').value = today.getMonth();
   document.getElementById('sel-year').value  = today.getFullYear();
 })();
+
+/* ---- Avisa logo de cara se estiver dentro do WhatsApp/Instagram ---- */
+if(isInAppBrowser()){
+  document.getElementById('inapp-banner').style.display='block';
+}
 
 renderAll();
 renderHistoryList();
