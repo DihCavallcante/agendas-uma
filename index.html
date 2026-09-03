@@ -110,8 +110,20 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 </head>
 <body>
 <div id="inapp-banner" style="display:none;position:sticky;top:0;z-index:999;background:#e53e3e;color:#fff;padding:12px 16px;text-align:center;font-family:'Nunito',sans-serif;font-weight:800;font-size:14px;line-height:1.5">
-  ⚠️ Para adicionar na agenda, abra este link fora do WhatsApp/Instagram.<br>
-  <span style="font-weight:600;font-size:13px">Toque nos <b>•••</b> ou <b>⋮</b> no topo da tela e escolha "Abrir no navegador".</span>
+  ⚠️ Para adicionar o evento à sua agenda, precisamos abrir esta página no navegador.<br>
+  <span style="font-weight:600;font-size:13px">Toque nos <b>•••</b> ou <b>⋮</b> no topo da tela e escolha "Abrir no navegador", ou toque abaixo pra copiar o link.</span><br>
+  <button onclick="copyPageLink(this)" style="margin-top:8px;padding:8px 14px;background:#fff;color:#e53e3e;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer">🌐 Copiar link pra abrir no navegador</button>
+</div>
+
+<!-- MODAL: escolha de agenda (só aparece 1x no iPhone) -->
+<div id="cal-choice-modal" style="display:none;position:fixed;inset:0;z-index:998;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;padding:26px 22px;max-width:340px;width:100%;text-align:center;font-family:'Nunito',sans-serif;color:#2D3748">
+    <div style="font-size:17px;font-weight:800;margin-bottom:6px">📅 Adicionar à minha agenda</div>
+    <div style="font-size:13px;color:#718096;margin-bottom:18px">Qual agenda você usa?</div>
+    <button onclick="chooseCalendar('google')" style="width:100%;padding:14px;background:#4285F4;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:10px">🟦 Google Agenda</button>
+    <button onclick="chooseCalendar('apple')" style="width:100%;padding:14px;background:#2D3748;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer">📱 Calendário do iPhone</button>
+    <div style="font-size:11px;color:#A0AEC0;margin-top:16px;line-height:1.5">Vamos preparar o evento automaticamente. Você só precisa confirmar no próximo passo.</div>
+  </div>
 </div>
 <div class="app">
 
@@ -258,8 +270,9 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
   <div id="exp-status" style="font-size:11px;text-align:center;margin-top:6px;color:var(--color-text-secondary)"></div>
 
   <button class="btn-ics" onclick="downloadICS()">📅 Adicionar todos os eventos na minha agenda</button>
-  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Um toque adiciona o mês inteiro na agenda do celular (funciona no iPhone e no Android).</div>
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Um toque adiciona o mês inteiro na agenda do celular. No iPhone, esse botão sempre usa a agenda do aparelho (o Google só aceita 1 evento por vez).</div>
   <div id="ics-status" style="font-size:11px;text-align:center;margin-top:4px;color:var(--color-text-secondary)"></div>
+  <button style="width:100%;margin-top:4px;padding:5px;background:none;border:none;font-size:10px;cursor:pointer;color:var(--color-text-secondary);text-decoration:underline" onclick="changeCalendarPreference()">⚙️ Trocar agenda padrão (iPhone)</button>
 
   <button class="btn-ics" style="background:#2C7A7B;margin-top:10px" onclick="downloadSharePage()">🔗 Gerar página pra mandar no grupo (link)</button>
   <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Baixa um .html — suba no seu GitHub Pages e mande o link em vez do arquivo. Quem clicar vê 1 botão só; o sistema identifica sozinho se é Android ou iPhone.</div>
@@ -443,8 +456,10 @@ function eventDateRange(ev){
   if(ev.time){
     const [hh,mm] = ev.time.split(':').map(Number);
     const start = `${y}${pad2(m)}${pad2(d)}T${pad2(hh)}${pad2(mm)}00`;
-    // sem duração: fim = início (usuário ajusta o horário final direto no Google Agenda, se quiser)
-    const end = start;
+    // Duração padrão de 1 hora. Usa Date pra lidar sozinho com virada de dia
+    // (ex: evento às 23:30 termina às 00:30 do dia seguinte).
+    const endDt = new Date(y, m-1, d, hh+1, mm, 0);
+    const end = `${endDt.getFullYear()}${pad2(endDt.getMonth()+1)}${pad2(endDt.getDate())}T${pad2(endDt.getHours())}${pad2(endDt.getMinutes())}00`;
     return {start, end, allDay:false};
   } else {
     const start = `${y}${pad2(m)}${pad2(d)}`;
@@ -498,11 +513,23 @@ function isIOS(){
 function isInAppBrowser(){
   return /FBAN|FBAV|Instagram|Line\/|WhatsApp|MicroMessenger|TikTok/i.test(navigator.userAgent || '');
 }
+function copyPageLink(btn){
+  const finish = (ok)=>{ btn.textContent = ok ? '✅ Link copiado!' : '⚠️ Selecione e copie o link manualmente'; setTimeout(()=>{ btn.textContent='🌐 Copiar link pra abrir no navegador'; }, 3000); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(location.href).then(()=>finish(true)).catch(()=>finish(false));
+  } else {
+    finish(false);
+  }
+}
 
 // Monta o conteúdo .ics (1 ou vários eventos)
+function toICSStamp(date){
+  // Converte pra UTC de verdade: YYYYMMDDTHHMMSSZ (o "Z" só pode ser usado
+  // com componentes que realmente estão em UTC — toISOString() já faz isso).
+  return date.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+}
 function buildICS(evList, orgName){
-  const now = new Date();
-  const stamp = `${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}T${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}Z`;
+  const stamp = toICSStamp(new Date());
   const uidBase = (orgName||'agenda').replace(/\s+/g,'').toLowerCase().replace(/[^\w-]/g,'') || 'agenda';
 
   let ics = 'BEGIN:VCALENDAR\r\n';
@@ -531,98 +558,187 @@ function buildICS(evList, orgName){
 }
 
 
-// Abre/baixa o .ics da forma mais confiável pra cada plataforma.
-// Nada é hospedado em link fixo (GitHub etc.) — o arquivo/URL é gerado
-// na hora, no próprio navegador da pessoa, a partir do Blob do .ics.
+// Abre/baixa o .ics no Android/Desktop (aqui o Blob funciona bem e já é testado).
+// No iOS este caminho não é mais usado pro Calendário do iPhone — ver
+// openIcsServerLink() logo abaixo, que usa uma URL https de verdade.
 function openICS(icsContent, filenameBase, statusEl){
-  const blob = new Blob([icsContent], {type:'text/calendar;charset=utf-8'});
+  const blob = new Blob([icsContent], {type:'text/calendar'});
   const url  = URL.createObjectURL(blob);
-
-  if(isIOS()){
-    // iPhone: abrir o Blob em nova aba faz o Safari mostrar a tela nativa
-    // "Adicionar à Agenda". O antigo esquema "data:" URI via window.location.href
-    // é bloqueado pelo Safari em várias versões do iOS — por isso não funcionava.
-    const win = window.open(url, '_blank');
-    if(!win){
-      // Se o pop-up for bloqueado, cai para um link clicado (mantém o gesto do usuário)
-      const link = document.createElement('a');
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  } else {
-    // Android / Desktop: download normal do arquivo .ics
-    const link = document.createElement('a');
-    link.download = `${filenameBase}.ics`;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-  // Revoga depois de um tempo maior, dando tempo do Safari mobile carregar o Blob
+  const link = document.createElement('a');
+  link.download = `${filenameBase}.ics`;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
   setTimeout(()=>URL.revokeObjectURL(url), 30000);
 
   if(statusEl){
     statusEl.style.color = '';
-    statusEl.textContent = isIOS() ? '✅ Toque em "Adicionar" na tela que abriu para confirmar.' : '✅ Arquivo baixado! Toque nele para confirmar na agenda.';
+    statusEl.textContent = '✅ Arquivo baixado! Toque nele para confirmar na agenda.';
     setTimeout(()=>{ statusEl.textContent=''; }, 5000);
   }
 }
 
-// Botão 📅+ de cada evento — 1 toque só, escolhe sozinho o melhor jeito pra cada aparelho
-function addEventSmart(i){
-  if(isInAppBrowser()){
-    document.getElementById('inapp-banner').style.display='block';
-    window.scrollTo({top:0, behavior:'smooth'});
-    return;
-  }
-  const ev = events[i];
-  if(isIOS()){
-    // iPhone: gera o .ics na hora (Blob) e abre a tela nativa "Adicionar à Agenda"
-    const orgName = document.getElementById('org-name').value || 'Agenda';
-    const ics = buildICS([ev], orgName);
-    openICS(ics, `evento-dia-${ev.day}`, null);
-  } else {
-    // Android/Desktop: abre o Google Agenda já preenchido, só toca em Salvar
-    window.open(googleCalendarUrl(ev), '_blank');
+/* ---- SERVIDOR DE .ICS (só usado no iPhone, pro Calendário do iPhone) ----
+   Troque essa URL pela do seu Worker depois de publicá-lo (veja ics-worker.js).
+   Sem essa URL configurada, o app cai automaticamente pro download comum. */
+const ICS_SERVER_URL = 'https://agenda-ics.diemersoninformatica.workers.dev/ics'; // <-- troque aqui
+
+function icsServerConfigured(){
+  return ICS_SERVER_URL && !ICS_SERVER_URL.includes('SEU-WORKER');
+}
+
+// Converte texto (com acentos etc.) pra base64 de forma segura, preservando UTF-8
+function toBase64Utf8(str){
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary);
+}
+
+function buildIcsServerLink(icsContent, filenameBase){
+  const params = new URLSearchParams({ data: toBase64Utf8(icsContent), name: filenameBase });
+  return `${ICS_SERVER_URL}?${params.toString()}`;
+}
+
+// Abre o link real (https) do .ics — o Safari/iOS reconhece corretamente
+// porque agora é uma resposta HTTP de verdade, com Content-Type certo,
+// e não mais uma blob: URL temporária (que tem comportamento inconsistente no iOS).
+function openIcsServerLink(icsContent, filenameBase, statusEl){
+  const link = buildIcsServerLink(icsContent, filenameBase);
+  const a = document.createElement('a');
+  a.href = link;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  if(statusEl){
+    statusEl.style.color = '';
+    statusEl.textContent = '✅ Pronto! Confirme no Calendário do seu iPhone.';
+    setTimeout(()=>{ statusEl.textContent=''; }, 5000);
   }
 }
 
-// Gera um .ics com todos os eventos do mês para importação em lote
-function downloadICS(){
+/* ---- PREFERÊNCIA DE AGENDA (iPhone) ---- */
+const CAL_PREF_KEY = 'agenda-calendar-preference'; // valores: 'google' | 'apple'
+function getCalPref(){ try{ return localStorage.getItem(CAL_PREF_KEY); }catch(e){ return null; } }
+function setCalPref(v){ try{ localStorage.setItem(CAL_PREF_KEY, v); }catch(e){} }
+function clearCalPref(){ try{ localStorage.removeItem(CAL_PREF_KEY); }catch(e){} }
+
+let pendingCalAction = null; // { evList, filenameBase, statusEl }
+
+function showCalendarChoice(evList, filenameBase, statusEl){
+  pendingCalAction = {evList, filenameBase, statusEl};
+  document.getElementById('cal-choice-modal').style.display = 'flex';
+}
+function hideCalendarChoice(){
+  document.getElementById('cal-choice-modal').style.display = 'none';
+}
+function chooseCalendar(kind){
+  setCalPref(kind);
+  hideCalendarChoice();
+  if(pendingCalAction){
+    proceedWithPreference(kind, pendingCalAction.evList, pendingCalAction.filenameBase, pendingCalAction.statusEl);
+    pendingCalAction = null;
+  }
+}
+function changeCalendarPreference(){
+  clearCalPref();
   const status = document.getElementById('ics-status');
+  if(status){
+    status.style.color = '';
+    status.textContent = 'Preferência apagada. No próximo toque, vamos perguntar de novo.';
+    setTimeout(()=>status.textContent='',3000);
+  }
+}
+
+function proceedWithPreference(pref, evList, filenameBase, statusEl){
+  const orgName = document.getElementById('org-name').value || 'Agenda';
+  if(pref==='google' && evList.length===1){
+    // Google só aceita 1 evento por vez — funciona perfeito nesse caso
+    window.open(googleCalendarUrl(evList[0]), '_blank');
+    if(statusEl){ statusEl.style.color=''; statusEl.textContent='✅ Abrindo o Google Agenda...'; setTimeout(()=>statusEl.textContent='',3000); }
+    return;
+  }
+  // Apple, OU Google com vários eventos de uma vez (o Google não tem como
+  // preencher o mês inteiro em um único link — aí usamos o Calendário do
+  // aparelho mesmo, que no fim das contas também pode estar sincronizado
+  // com a conta Google da pessoa, se ela configurou assim no iPhone).
+  const ics = buildICS(evList, orgName);
+  if(icsServerConfigured()){
+    openIcsServerLink(ics, filenameBase, statusEl);
+  } else {
+    // Sem servidor configurado ainda: cai pro download comum, sem travar a pessoa.
+    openICS(ics, filenameBase, statusEl);
+  }
+}
+
+// Ponto único de entrada — usado tanto pelo botão de 1 evento quanto pelo "todos os eventos"
+function handleAddToCalendar(evList, filenameBase, statusEl){
   if(isInAppBrowser()){
     document.getElementById('inapp-banner').style.display='block';
     window.scrollTo({top:0, behavior:'smooth'});
     return;
   }
-  if(!events.length){
-    status.style.color = '';
-    status.textContent = 'Adicione ao menos um evento antes de exportar.';
-    setTimeout(()=>status.textContent='',2500);
+  if(!evList.length){
+    if(statusEl){
+      statusEl.style.color = '';
+      statusEl.textContent = 'Adicione ao menos um evento antes de continuar.';
+      setTimeout(()=>statusEl.textContent='',2500);
+    }
     return;
   }
-  const orgName = document.getElementById('org-name').value || 'Agenda';
-  const ics = buildICS(events, orgName);
+  if(!isIOS()){
+    // Android/Desktop: prioriza sempre o Google Agenda pra 1 evento;
+    // pra vários de uma vez, mantém o .ics normal (já funciona bem).
+    if(evList.length===1){
+      window.open(googleCalendarUrl(evList[0]), '_blank');
+    } else {
+      const orgName = document.getElementById('org-name').value || 'Agenda';
+      openICS(buildICS(evList, orgName), filenameBase, statusEl);
+    }
+    return;
+  }
+  // iPhone/iPad
+  const pref = getCalPref();
+  if(!pref){
+    showCalendarChoice(evList, filenameBase, statusEl);
+    return;
+  }
+  proceedWithPreference(pref, evList, filenameBase, statusEl);
+}
+
+// Botão 📅+ de cada evento — 1 toque só
+function addEventSmart(i){
+  const ev = events[i];
+  handleAddToCalendar([ev], `evento-dia-${ev.day}`, null);
+}
+
+// Botão "Adicionar todos os eventos" — gera 1 .ics com o mês inteiro
+function downloadICS(){
+  const status = document.getElementById('ics-status');
   const month = parseInt(document.getElementById('sel-month').value);
   const year  = document.getElementById('sel-year').value;
-  openICS(ics, `agenda-${MONTHS_PT[month].toLowerCase()}-${year}`, status);
+  handleAddToCalendar(events, `agenda-${MONTHS_PT[month].toLowerCase()}-${year}`, status);
 }
 
 /* ---- PÁGINA-LINK (pra hospedar e mandar no WhatsApp em vez do arquivo) ----
-   Gera um .html sozinho (sem depender do resto do sistema) com o .ics já
-   embutido dentro. A pessoa que recebe só vê 1 botão; o próprio código
-   detecta Android/iPhone e faz a coisa certa em cada um — sem precisar de
-   servidor especial nem de configurar cabeçalho de Content-Type em lugar
-   nenhum, porque quem gera o arquivo/abre a tela de "Adicionar" é o
-   JavaScript no navegador da pessoa, igual ao botão de dentro desta ferramenta. */
-function buildShareLandingHTML(orgName, label, icsContent){
-  const safeIcs   = JSON.stringify(icsContent).replace(/<\/script/gi, '<\\/script');
-  const safeOrg   = JSON.stringify(orgName).replace(/<\/script/gi, '<\\/script');
-  const safeLabel = JSON.stringify(label).replace(/<\/script/gi, '<\\/script');
+   Gera um .html sozinho (sem depender do resto do sistema), com o mesmo
+   fluxo da ferramenta principal: no Android e no iPhone com preferência
+   "Google", abre o Google Agenda pronto; no iPhone com preferência "Apple"
+   (ou Google com vários eventos de uma vez), usa o link real do servidor
+   de .ics (ver ICS_SERVER_URL) — nada de blob: no caminho principal. */
+function buildShareLandingHTML(orgName, label, icsContent, evList){
+  const evPayload = evList.map(ev => {
+    const {start, end, allDay} = eventDateRange(ev);
+    return {desc: ev.desc, start, end, allDay};
+  });
+  const safeIcs    = JSON.stringify(icsContent).replace(/<\/script/gi, '<\\/script');
+  const safeOrg    = JSON.stringify(orgName).replace(/<\/script/gi, '<\\/script');
+  const safeLabel  = JSON.stringify(label).replace(/<\/script/gi, '<\\/script');
+  const safeEvents = JSON.stringify(evPayload).replace(/<\/script/gi, '<\\/script');
+  const safeServer = JSON.stringify(ICS_SERVER_URL).replace(/<\/script/gi, '<\\/script');
   return '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
     + '<title>Adicionar agenda \u2014 ' + orgName.replace(/</g,'&lt;') + '</title>\n'
@@ -636,52 +752,76 @@ function buildShareLandingHTML(orgName, label, icsContent){
     + '.btn:active{background:#3367D6}\n'
     + '.hint{font-size:12px;color:#A0AEC0;margin-top:14px;line-height:1.5}\n'
     + '.status{font-size:13px;margin-top:14px;min-height:18px;font-weight:700}\n'
+    + '.change-link{font-size:11px;color:#718096;text-decoration:underline;background:none;border:none;cursor:pointer;margin-top:12px}\n'
     + '#inapp-banner{display:none;position:fixed;top:0;left:0;right:0;background:#e53e3e;color:#fff;padding:12px 16px;text-align:center;font-weight:800;font-size:13px;line-height:1.5;z-index:99}\n'
+    + '#inapp-banner button{margin-top:8px;padding:8px 14px;background:#fff;color:#e53e3e;border:none;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer}\n'
+    + '#cal-modal{display:none;position:fixed;inset:0;z-index:98;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:20px}\n'
+    + '#cal-modal .box{background:#fff;color:#2D3748;border-radius:16px;padding:26px 22px;max-width:340px;width:100%;text-align:center}\n'
+    + '#cal-modal .t1{font-size:17px;font-weight:800;margin-bottom:6px}\n'
+    + '#cal-modal .t2{font-size:13px;color:#718096;margin-bottom:18px}\n'
+    + '#cal-modal button.opt{width:100%;padding:14px;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:10px;color:#fff}\n'
     + '</style>\n</head>\n<body>\n'
-    + '<div id="inapp-banner">\u26a0\ufe0f Para adicionar na agenda, toque nos <b>\u2022\u2022\u2022</b> ou <b>\u22ee</b> no topo e escolha "Abrir no navegador".</div>\n'
+    + '<div id="inapp-banner">\u26a0\ufe0f Para adicionar o evento \u00e0 sua agenda, precisamos abrir esta p\u00e1gina no navegador.<br>'
+    + '<span style="font-weight:600;font-size:12px">Toque nos <b>\u2022\u2022\u2022</b> ou <b>\u22ee</b> no topo, ou copie o link abaixo.</span><br>'
+    + '<button onclick="copyPageLink(this)">\ud83c\udf10 Copiar link pra abrir no navegador</button>\n'
+    + '</div>\n'
+    + '<div id="cal-modal"><div class="box">\n'
+    + '  <div class="t1">\ud83d\udcc5 Adicionar \u00e0 minha agenda</div>\n'
+    + '  <div class="t2">Qual agenda voc\u00ea usa?</div>\n'
+    + '  <button class="opt" style="background:#4285F4" onclick="chooseCalendar(\'google\')">\ud83d\udfe6 Google Agenda</button>\n'
+    + '  <button class="opt" style="background:#2D3748" onclick="chooseCalendar(\'apple\')">\ud83d\udcf1 Calend\u00e1rio do iPhone</button>\n'
+    + '  <div style="font-size:11px;color:#A0AEC0;margin-top:6px;line-height:1.5">Vamos preparar o evento automaticamente. Voc\u00ea s\u00f3 precisa confirmar no pr\u00f3ximo passo.</div>\n'
+    + '</div></div>\n'
     + '<div class="card">\n'
     + '  <div class="org" id="org-lbl"></div>\n'
     + '  <div class="label" id="month-lbl"></div>\n'
-    + '  <button class="btn" id="add-btn" onclick="addToCalendar()">\ud83d\udcc5 Adicionar \u00e0 minha agenda</button>\n'
-    + '  <div class="hint" id="hint"></div>\n'
+    + '  <button class="btn" id="add-btn" onclick="mainClick()">\ud83d\udcc5 Adicionar \u00e0 minha agenda</button>\n'
+    + '  <div class="hint">Toque no bot\u00e3o pra adicionar na sua agenda.</div>\n'
     + '  <div class="status" id="status"></div>\n'
+    + '  <button class="change-link" id="change-link" style="display:none" onclick="changePreference()">\u2699\ufe0f Trocar agenda</button>\n'
     + '</div>\n'
     + '<script>\n'
     + 'const ORG_NAME=' + safeOrg + ';\n'
     + 'const LABEL=' + safeLabel + ';\n'
     + 'const ICS_CONTENT=' + safeIcs + ';\n'
+    + 'const EVENTS=' + safeEvents + ';\n'
+    + 'const ICS_SERVER_URL=' + safeServer + ';\n'
+    + 'const CAL_PREF_KEY="agenda-calendar-preference";\n'
     + 'document.getElementById("org-lbl").textContent=ORG_NAME;\n'
     + 'document.getElementById("month-lbl").textContent=LABEL;\n'
     + 'function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);}\n'
     + 'function isInAppBrowser(){return /FBAN|FBAV|Instagram|Line\\/|WhatsApp|MicroMessenger|TikTok/i.test(navigator.userAgent||"");}\n'
-    + 'document.getElementById("hint").textContent = isIOS()\n'
-    + '  ? \'No iPhone: toque no bot\u00e3o, escolha "Adicionar" na tela do Calend\u00e1rio que abrir.\'\n'
-    + '  : "No Android: toque no bot\u00e3o, o arquivo baixa e \u00e9 s\u00f3 tocar nele pra confirmar.";\n'
+    + 'function copyPageLink(btn){var f=function(ok){btn.textContent=ok?"\u2705 Link copiado!":"\u26a0\ufe0f Copie o link manualmente";setTimeout(function(){btn.textContent="\ud83c\udf10 Copiar link pra abrir no navegador";},3000);};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(location.href).then(function(){f(true);}).catch(function(){f(false);});}else{f(false);}}\n'
     + 'if(isInAppBrowser()){document.getElementById("inapp-banner").style.display="block";}\n'
-    + 'function addToCalendar(){\n'
-    + '  const status=document.getElementById("status");\n'
-    + '  if(isInAppBrowser()){\n'
-    + '    document.getElementById("inapp-banner").style.display="block";\n'
-    + '    window.scrollTo({top:0,behavior:"smooth"});\n'
+    + 'function getCalPref(){try{return localStorage.getItem(CAL_PREF_KEY);}catch(e){return null;}}\n'
+    + 'function setCalPref(v){try{localStorage.setItem(CAL_PREF_KEY,v);}catch(e){}}\n'
+    + 'function clearCalPref(){try{localStorage.removeItem(CAL_PREF_KEY);}catch(e){}}\n'
+    + 'if(isIOS()&&getCalPref()){document.getElementById("change-link").style.display="inline-block";}\n'
+    + 'function toBase64Utf8(str){var bytes=new TextEncoder().encode(str);var binary="";bytes.forEach(function(b){binary+=String.fromCharCode(b);});return btoa(binary);}\n'
+    + 'function icsServerConfigured(){return ICS_SERVER_URL&&ICS_SERVER_URL.indexOf("SEU-WORKER")===-1;}\n'
+    + 'function googleCalendarUrlFor(ev){var params=new URLSearchParams({action:"TEMPLATE",text:ev.desc,dates:ev.start+"/"+ev.end,details:ORG_NAME?("Evento da agenda "+ORG_NAME):""});return "https://calendar.google.com/calendar/render?"+params.toString();}\n'
+    + 'function openIcsBlob(){var blob=new Blob([ICS_CONTENT],{type:"text/calendar"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="agenda.ics";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},30000);document.getElementById("status").textContent="\u2705 Arquivo baixado! Toque nele pra confirmar na agenda.";}\n'
+    + 'function openIcsServer(){var params=new URLSearchParams({data:toBase64Utf8(ICS_CONTENT),name:"agenda"});var link=ICS_SERVER_URL+"?"+params.toString();var a=document.createElement("a");a.href=link;a.target="_blank";a.rel="noopener";document.body.appendChild(a);a.click();document.body.removeChild(a);document.getElementById("status").textContent="\u2705 Pronto! Agora \u00e9 s\u00f3 confirmar no Calend\u00e1rio.";}\n'
+    + 'function proceedWithPreference(pref){\n'
+    + '  if(pref==="google"&&EVENTS.length===1){\n'
+    + '    window.open(googleCalendarUrlFor(EVENTS[0]),"_blank");\n'
+    + '    document.getElementById("status").textContent="\u2705 Abrindo o Google Agenda...";\n'
     + '    return;\n'
     + '  }\n'
-    + '  const blob=new Blob([ICS_CONTENT],{type:"text/calendar;charset=utf-8"});\n'
-    + '  const url=URL.createObjectURL(blob);\n'
-    + '  if(isIOS()){\n'
-    + '    const win=window.open(url,"_blank");\n'
-    + '    if(!win){\n'
-    + '      const a=document.createElement("a");\n'
-    + '      a.href=url;a.target="_blank";a.rel="noopener";\n'
-    + '      document.body.appendChild(a);a.click();document.body.removeChild(a);\n'
-    + '    }\n'
-    + '    status.textContent="\u2705 Toque em \\"Adicionar\\" na tela que abriu.";\n'
-    + '  } else {\n'
-    + '    const a=document.createElement("a");\n'
-    + '    a.href=url;a.download="agenda.ics";\n'
-    + '    document.body.appendChild(a);a.click();document.body.removeChild(a);\n'
-    + '    status.textContent="\u2705 Arquivo baixado! Toque nele pra confirmar na agenda.";\n'
+    + '  if(icsServerConfigured()){ openIcsServer(); } else { openIcsBlob(); }\n'
+    + '}\n'
+    + 'function chooseCalendar(kind){setCalPref(kind);document.getElementById("cal-modal").style.display="none";document.getElementById("change-link").style.display="inline-block";proceedWithPreference(kind);}\n'
+    + 'function changePreference(){clearCalPref();document.getElementById("change-link").style.display="none";document.getElementById("status").textContent="Prefer\u00eancia apagada. Toque no bot\u00e3o de novo pra escolher.";}\n'
+    + 'function mainClick(){\n'
+    + '  if(isInAppBrowser()){document.getElementById("inapp-banner").style.display="block";window.scrollTo({top:0,behavior:"smooth"});return;}\n'
+    + '  if(!isIOS()){\n'
+    + '    if(EVENTS.length===1){window.open(googleCalendarUrlFor(EVENTS[0]),"_blank");document.getElementById("status").textContent="\u2705 Abrindo o Google Agenda...";}\n'
+    + '    else{openIcsBlob();}\n'
+    + '    return;\n'
     + '  }\n'
-    + '  setTimeout(()=>URL.revokeObjectURL(url),30000);\n'
+    + '  var pref=getCalPref();\n'
+    + '  if(!pref){document.getElementById("cal-modal").style.display="flex";return;}\n'
+    + '  proceedWithPreference(pref);\n'
     + '}\n'
     + '<\/script>\n</body>\n</html>\n';
 }
@@ -699,7 +839,7 @@ function downloadSharePage(){
   const year  = document.getElementById('sel-year').value;
   const label = `${MONTHS_PT[month]} de ${year}`;
   const ics   = buildICS(events, orgName);
-  const html  = buildShareLandingHTML(orgName, label, ics);
+  const html  = buildShareLandingHTML(orgName, label, ics, events);
 
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
   const url  = URL.createObjectURL(blob);
@@ -712,7 +852,9 @@ function downloadSharePage(){
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
 
   status.style.color = '';
-  status.textContent = '✅ Página gerada! Suba esse .html no seu GitHub Pages e mande o link no grupo.';
+  status.textContent = icsServerConfigured()
+    ? '✅ Página gerada! Suba esse .html no seu GitHub Pages e mande o link no grupo.'
+    : '✅ Página gerada! (Você ainda não configurou o ICS_SERVER_URL — veja as instruções.) Suba esse .html no GitHub Pages e mande o link no grupo.';
   setTimeout(()=>{ status.textContent=''; }, 7000);
 }
 
