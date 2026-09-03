@@ -261,6 +261,9 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
   <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Um toque adiciona o mês inteiro na agenda do celular (funciona no iPhone e no Android).</div>
   <div id="ics-status" style="font-size:11px;text-align:center;margin-top:4px;color:var(--color-text-secondary)"></div>
 
+  <button class="btn-ics" style="background:#2C7A7B;margin-top:10px" onclick="downloadSharePage()">🔗 Gerar página pra mandar no grupo (link)</button>
+  <div style="font-size:10px;color:var(--color-text-secondary);margin-top:4px;line-height:1.4">Baixa um .html — suba no seu GitHub Pages e mande o link em vez do arquivo. Quem clicar vê 1 botão só; o sistema identifica sozinho se é Android ou iPhone.</div>
+
   <div class="divider"></div>
   <div class="lbl">Histórico de Agendas</div>
   <button class="btn-add" style="background:#553C9A" onclick="saveHistory()">💾 Salvar estado atual</button>
@@ -607,6 +610,110 @@ function downloadICS(){
   const month = parseInt(document.getElementById('sel-month').value);
   const year  = document.getElementById('sel-year').value;
   openICS(ics, `agenda-${MONTHS_PT[month].toLowerCase()}-${year}`, status);
+}
+
+/* ---- PÁGINA-LINK (pra hospedar e mandar no WhatsApp em vez do arquivo) ----
+   Gera um .html sozinho (sem depender do resto do sistema) com o .ics já
+   embutido dentro. A pessoa que recebe só vê 1 botão; o próprio código
+   detecta Android/iPhone e faz a coisa certa em cada um — sem precisar de
+   servidor especial nem de configurar cabeçalho de Content-Type em lugar
+   nenhum, porque quem gera o arquivo/abre a tela de "Adicionar" é o
+   JavaScript no navegador da pessoa, igual ao botão de dentro desta ferramenta. */
+function buildShareLandingHTML(orgName, label, icsContent){
+  const safeIcs   = JSON.stringify(icsContent).replace(/<\/script/gi, '<\\/script');
+  const safeOrg   = JSON.stringify(orgName).replace(/<\/script/gi, '<\\/script');
+  const safeLabel = JSON.stringify(label).replace(/<\/script/gi, '<\\/script');
+  return '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    + '<title>Adicionar agenda \u2014 ' + orgName.replace(/</g,'&lt;') + '</title>\n'
+    + '<style>\n'
+    + '*{box-sizing:border-box;margin:0;padding:0}\n'
+    + 'body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#1A202C;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}\n'
+    + '.card{max-width:380px;width:100%;background:#2D3748;border-radius:16px;padding:28px 24px;text-align:center}\n'
+    + '.org{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:#A0AEC0;margin-bottom:4px}\n'
+    + '.label{font-size:20px;font-weight:800;margin-bottom:22px}\n'
+    + '.btn{width:100%;padding:16px;background:#4285F4;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer}\n'
+    + '.btn:active{background:#3367D6}\n'
+    + '.hint{font-size:12px;color:#A0AEC0;margin-top:14px;line-height:1.5}\n'
+    + '.status{font-size:13px;margin-top:14px;min-height:18px;font-weight:700}\n'
+    + '#inapp-banner{display:none;position:fixed;top:0;left:0;right:0;background:#e53e3e;color:#fff;padding:12px 16px;text-align:center;font-weight:800;font-size:13px;line-height:1.5;z-index:99}\n'
+    + '</style>\n</head>\n<body>\n'
+    + '<div id="inapp-banner">\u26a0\ufe0f Para adicionar na agenda, toque nos <b>\u2022\u2022\u2022</b> ou <b>\u22ee</b> no topo e escolha "Abrir no navegador".</div>\n'
+    + '<div class="card">\n'
+    + '  <div class="org" id="org-lbl"></div>\n'
+    + '  <div class="label" id="month-lbl"></div>\n'
+    + '  <button class="btn" id="add-btn" onclick="addToCalendar()">\ud83d\udcc5 Adicionar \u00e0 minha agenda</button>\n'
+    + '  <div class="hint" id="hint"></div>\n'
+    + '  <div class="status" id="status"></div>\n'
+    + '</div>\n'
+    + '<script>\n'
+    + 'const ORG_NAME=' + safeOrg + ';\n'
+    + 'const LABEL=' + safeLabel + ';\n'
+    + 'const ICS_CONTENT=' + safeIcs + ';\n'
+    + 'document.getElementById("org-lbl").textContent=ORG_NAME;\n'
+    + 'document.getElementById("month-lbl").textContent=LABEL;\n'
+    + 'function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);}\n'
+    + 'function isInAppBrowser(){return /FBAN|FBAV|Instagram|Line\\/|WhatsApp|MicroMessenger|TikTok/i.test(navigator.userAgent||"");}\n'
+    + 'document.getElementById("hint").textContent = isIOS()\n'
+    + '  ? \'No iPhone: toque no bot\u00e3o, escolha "Adicionar" na tela do Calend\u00e1rio que abrir.\'\n'
+    + '  : "No Android: toque no bot\u00e3o, o arquivo baixa e \u00e9 s\u00f3 tocar nele pra confirmar.";\n'
+    + 'if(isInAppBrowser()){document.getElementById("inapp-banner").style.display="block";}\n'
+    + 'function addToCalendar(){\n'
+    + '  const status=document.getElementById("status");\n'
+    + '  if(isInAppBrowser()){\n'
+    + '    document.getElementById("inapp-banner").style.display="block";\n'
+    + '    window.scrollTo({top:0,behavior:"smooth"});\n'
+    + '    return;\n'
+    + '  }\n'
+    + '  const blob=new Blob([ICS_CONTENT],{type:"text/calendar;charset=utf-8"});\n'
+    + '  const url=URL.createObjectURL(blob);\n'
+    + '  if(isIOS()){\n'
+    + '    const win=window.open(url,"_blank");\n'
+    + '    if(!win){\n'
+    + '      const a=document.createElement("a");\n'
+    + '      a.href=url;a.target="_blank";a.rel="noopener";\n'
+    + '      document.body.appendChild(a);a.click();document.body.removeChild(a);\n'
+    + '    }\n'
+    + '    status.textContent="\u2705 Toque em \\"Adicionar\\" na tela que abriu.";\n'
+    + '  } else {\n'
+    + '    const a=document.createElement("a");\n'
+    + '    a.href=url;a.download="agenda.ics";\n'
+    + '    document.body.appendChild(a);a.click();document.body.removeChild(a);\n'
+    + '    status.textContent="\u2705 Arquivo baixado! Toque nele pra confirmar na agenda.";\n'
+    + '  }\n'
+    + '  setTimeout(()=>URL.revokeObjectURL(url),30000);\n'
+    + '}\n'
+    + '<\/script>\n</body>\n</html>\n';
+}
+
+function downloadSharePage(){
+  const status = document.getElementById('ics-status');
+  if(!events.length){
+    status.style.color = '';
+    status.textContent = 'Adicione ao menos um evento antes de gerar a página.';
+    setTimeout(()=>status.textContent='',2500);
+    return;
+  }
+  const orgName = document.getElementById('org-name').value || 'Agenda';
+  const month = parseInt(document.getElementById('sel-month').value);
+  const year  = document.getElementById('sel-year').value;
+  const label = `${MONTHS_PT[month]} de ${year}`;
+  const ics   = buildICS(events, orgName);
+  const html  = buildShareLandingHTML(orgName, label, ics);
+
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = `agenda-${MONTHS_PT[month].toLowerCase()}-${year}.html`;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+
+  status.style.color = '';
+  status.textContent = '✅ Página gerada! Suba esse .html no seu GitHub Pages e mande o link no grupo.';
+  setTimeout(()=>{ status.textContent=''; }, 7000);
 }
 
 /* ---- LOGO ---- */
