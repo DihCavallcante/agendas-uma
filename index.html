@@ -307,7 +307,7 @@ input[type=text],input[type=time],input[type=number],select{width:100%;padding:6
 
     <div class="ag-footer">
       <img id="footer-logo" src="" style="display:none">
-      <div class="ag-footer-text" id="footer-text" style="font-family:'Bebas Neue',sans-serif">UMA ÉLIDA</div>
+      <div class="ag-footer-text" id="footer-text" style="font-family:'Bebas Neue',sans-serif">UMA DIADEMA</div>
     </div>
   </div>
 </div>
@@ -601,24 +601,44 @@ function buildIcsServerLink(icsContent, filenameBase){
   return `${ICS_SERVER_URL}?${params.toString()}`;
 }
 
+// ========== ALTERAÇÃO 1: FUNÇÃO openIcsServerLink MODIFICADA ==========
 // Abre o link real (https) do .ics — o Safari/iOS reconhece corretamente
 // porque agora é uma resposta HTTP de verdade, com Content-Type certo,
 // e não mais uma blob: URL temporária (que tem comportamento inconsistente no iOS).
 function openIcsServerLink(icsContent, filenameBase, statusEl){
   const link = buildIcsServerLink(icsContent, filenameBase);
-  const a = document.createElement('a');
-  a.href = link;
-  a.target = '_blank';
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  if(statusEl){
-    statusEl.style.color = '';
-    statusEl.textContent = '✅ Pronto! Confirme no Calendário do seu iPhone.';
-    setTimeout(()=>{ statusEl.textContent=''; }, 5000);
+  
+  // iOS: usar location.href diretamente é mais confiável
+  if(isIOS()){
+    // Mostra feedback antes de navegar
+    if(statusEl){
+      statusEl.style.color = '';
+      statusEl.textContent = '📅 Abrindo calendário...';
+    }
+    
+    // Pequeno delay para o feedback aparecer
+    setTimeout(() => {
+      window.location.href = link;
+    }, 300);
+    
+  } else {
+    // Android/Desktop: abrir em nova aba
+    const a = document.createElement('a');
+    a.href = link;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    if(statusEl){
+      statusEl.style.color = '';
+      statusEl.textContent = '✅ Pronto! Confirme na sua agenda.';
+      setTimeout(()=>{ statusEl.textContent=''; }, 5000);
+    }
   }
 }
+// ========== FIM DA ALTERAÇÃO 1 ==========
 
 /* ---- PREFERÊNCIA DE AGENDA (iPhone) ---- */
 const CAL_PREF_KEY = 'agenda-calendar-preference'; // valores: 'google' | 'apple'
@@ -801,7 +821,7 @@ function buildShareLandingHTML(orgName, label, icsContent, evList){
     + 'function icsServerConfigured(){return ICS_SERVER_URL&&ICS_SERVER_URL.indexOf("SEU-WORKER")===-1;}\n'
     + 'function googleCalendarUrlFor(ev){var params=new URLSearchParams({action:"TEMPLATE",text:ev.desc,dates:ev.start+"/"+ev.end,details:ORG_NAME?("Evento da agenda "+ORG_NAME):""});return "https://calendar.google.com/calendar/render?"+params.toString();}\n'
     + 'function openIcsBlob(){var blob=new Blob([ICS_CONTENT],{type:"text/calendar"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="agenda.ics";document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},30000);document.getElementById("status").textContent="\u2705 Arquivo baixado! Toque nele pra confirmar na agenda.";}\n'
-    + 'function openIcsServer(){var params=new URLSearchParams({data:toBase64Utf8(ICS_CONTENT),name:"agenda"});var link=ICS_SERVER_URL+"?"+params.toString();var a=document.createElement("a");a.href=link;a.target="_blank";a.rel="noopener";document.body.appendChild(a);a.click();document.body.removeChild(a);document.getElementById("status").textContent="\u2705 Pronto! Agora \u00e9 s\u00f3 confirmar no Calend\u00e1rio.";}\n'
+    + 'function openIcsServer(){var params=new URLSearchParams({data:toBase64Utf8(ICS_CONTENT),name:"agenda"});var link=ICS_SERVER_URL+"?"+params.toString();if(isIOS()){document.getElementById("status").textContent="\ud83d\udcc5 Abrindo calend\u00e1rio...";setTimeout(function(){window.location.href=link;},300);}else{var a=document.createElement("a");a.href=link;a.target="_blank";a.rel="noopener";document.body.appendChild(a);a.click();document.body.removeChild(a);document.getElementById("status").textContent="\u2705 Pronto! Agora \u00e9 s\u00f3 confirmar no Calend\u00e1rio.";}}\n'
     + 'function proceedWithPreference(pref){\n'
     + '  if(pref==="google"&&EVENTS.length===1){\n'
     + '    window.open(googleCalendarUrlFor(EVENTS[0]),"_blank");\n'
